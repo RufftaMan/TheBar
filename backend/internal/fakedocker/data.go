@@ -16,14 +16,24 @@ import (
 
 const cores = 12 // the pretend host has 12 cores
 
-// wave is a value that drifts smoothly: base + amp*(1+sin)/2.
+// wave is a value that drifts smoothly between base and base+amp. Two
+// overlapping sines (the second one faster and weaker) keep the curve from
+// looking like a textbook sine.
 type wave struct{ base, amp, period, phase float64 }
+
+const (
+	w1, w2    = 0.65, 0.35 // weights of the two sines (sum to 1)
+	fast      = 0.37       // the second sine's period relative to the first
+	phaseSkew = 2.3
+)
 
 func (w wave) at(t float64) float64 {
 	if w.amp == 0 {
 		return w.base
 	}
-	return w.base + w.amp*(1+math.Sin(2*math.Pi*t/w.period+w.phase))/2
+	a := 2*math.Pi*t/w.period + w.phase
+	b := 2*math.Pi*t/(w.period*fast) + w.phase*phaseSkew
+	return w.base + w.amp*(1+w1*math.Sin(a)+w2*math.Sin(b))/2
 }
 
 // integral is the area under the wave from 0 to t, so counters (bytes, CPU
@@ -32,8 +42,12 @@ func (w wave) integral(t float64) float64 {
 	if w.amp == 0 {
 		return w.base * t
 	}
-	om := 2 * math.Pi / w.period
-	return w.base*t + w.amp/2*(t-(math.Cos(om*t+w.phase)-math.Cos(w.phase))/om)
+	o1 := 2 * math.Pi / w.period
+	o2 := 2 * math.Pi / (w.period * fast)
+	p2 := w.phase * phaseSkew
+	s1 := -(math.Cos(o1*t+w.phase) - math.Cos(w.phase)) / o1
+	s2 := -(math.Cos(o2*t+p2) - math.Cos(p2)) / o2
+	return w.base*t + w.amp/2*(t+w1*s1+w2*s2)
 }
 
 type port struct{ host, container int }

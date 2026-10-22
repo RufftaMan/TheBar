@@ -2,6 +2,8 @@
 
 Where all your containers meet. A fast, simple overview of the Docker services on a homelab host: one card per app, click the logo to open its web UI, with live stats and the usual container controls under the hood.
 
+![TheBar dashboard: groups, cards with live stats, update and config hints](docs/screenshots/dashboard.png)
+
 - **Bookmarks first.** Every app with a web UI gets a card; click the logo to open it in a new tab. Links are detected from published ports, host networking and Nginx Proxy Manager domains, and can be overridden per card.
 - **Nicknames.** "Movies" instead of "radarr". Common apps get a suggestion, every card can be renamed, and the real name stays underneath.
 - **Groups.** Compose projects become collapsible groups automatically. Helpers (databases, caches, exporters) fold into the card of the app they belong to. Similar one-off containers (`name-2024-01-01`, …) collapse into a single card. Arrange everything like a phone home screen: drag a card onto another to make a group, into a group to add it, or between cards to reorder (long-press on touch). Groups move by their header, rename with the pencil, and disappear when empty.
@@ -14,6 +16,22 @@ Where all your containers meet. A fast, simple overview of the Docker services o
 - **Host strip.** CPU, RAM, disks, network, uptime and container count.
 - **Ports.** Lists what's listening on the host and finds a free port for the next service.
 - **Grafana links.** Each card links to Grafana for the container (configurable template).
+
+## Screenshots
+
+Made-up demo data, taken with the tools in `tools/screenshots`.
+
+**An open card:** live charts, start/stop/restart, logs, config.
+
+![An open card with live charts](docs/screenshots/card.png)
+
+**The compose editor:** validated before saving, with a prompt to apply the change.
+
+![The compose editor](docs/screenshots/editor.png)
+
+**On a phone:**
+
+<img src="docs/screenshots/phone.png" width="320" alt="TheBar on a phone">
 
 ## Running it
 
@@ -78,6 +96,13 @@ Not covered: a single shared password (no users or roles), no two-factor login. 
 - The layout (order, groups, nicknames, …) is saved on the server, so every browser sees the same thing.
 
 ## Development
+
+TheBar can run against a **fake Docker host** with made-up services: handy for trying the interface without a Docker setup, for hacking on the UI, and for the screenshots. It never touches the real Docker.
+
+```sh
+cd backend && go run ./cmd/fakedocker   # prints the command that starts TheBar against it
+tools/screenshots/run.sh                # rebuilds docs/screenshots (needs go, npm and docker)
+```
 
 ```sh
 # backend on :18800 with auth off
