@@ -93,8 +93,9 @@
       {#if running.length}
         <div class="charts">
           <Chart
-            title="CPU (whole machine)"
-            value="{pct(last(agg.cpu))} · {cores(last(agg.cpu), app.host?.cores)}"
+            title="CPU"
+            value={pct(last(agg.cpu))}
+            sub="Whole machine · {cores(last(agg.cpu), app.host?.cores)}"
             series={[{ name: 'CPU', values: agg.cpu, color }]}
             times={agg.t}
             format={(v) => pct(v)}
@@ -102,6 +103,7 @@
           <Chart
             title="Memory"
             value={bytes(last(agg.mem))}
+            sub="Working set, without cache"
             series={[{ name: 'Memory', values: agg.mem, color }]}
             times={agg.t}
             format={(v) => bytes(v)}

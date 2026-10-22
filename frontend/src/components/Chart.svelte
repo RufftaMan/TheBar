@@ -10,7 +10,16 @@
     format,
     min = 1,
     value = '',
-  }: { title: string; series: Series[]; times: number[]; format: (v: number) => string; min?: number; value?: string } = $props();
+    sub = '',
+  }: {
+    title: string;
+    series: Series[];
+    times: number[];
+    format: (v: number) => string;
+    min?: number;
+    value?: string;
+    sub?: string; // small caption under the title, where a two-series chart has its legend
+  } = $props();
 
   const W = 300;
   const H = 90;
@@ -44,6 +53,8 @@
         <span><i style="background:{s.color}"></i>{s.name}</span>
       {/each}
     </div>
+  {:else}
+    <div class="legend sub" title={sub}>{sub}</div>
   {/if}
   <div class="plot">
     <svg
@@ -92,22 +103,35 @@
   }
   figcaption {
     display: flex;
+    flex-wrap: wrap; /* a long value drops to its own line instead of breaking mid-value */
     justify-content: space-between;
     align-items: baseline;
-    gap: 8px;
+    gap: 0 8px;
   }
   .t {
     font-size: 12px;
     color: var(--text-2);
     font-weight: 600;
+    white-space: nowrap;
   }
   .v {
     font-size: 15px;
     font-weight: 600;
+    white-space: nowrap;
+    margin-left: auto;
+  }
+  .sub {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-3);
   }
   .legend {
     display: flex;
     gap: 12px;
+    min-height: 16px; /* same height with a legend or a caption, so the plots line up */
+    align-items: center;
     font-size: 11px;
     color: var(--text-2);
     margin-top: 2px;
