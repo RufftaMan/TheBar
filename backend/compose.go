@@ -93,7 +93,14 @@ func composeEnv(dir string) []string {
 		env = append(env, kv)
 	}
 	// compose files may use ${PWD}; give them the project dir like a shell would
-	return append(env, "PWD="+dir)
+	env = append(env, "PWD="+dir)
+	// The compose CLI must talk to the same Docker as TheBar's own API client.
+	// Without this, TheBar pointed at another socket (a demo, a test) would run
+	// its stack actions against whatever Docker the shell environment names.
+	if sock := os.Getenv("THEBAR_DOCKER_SOCK"); sock != "" {
+		env = append(env, "DOCKER_HOST=unix://"+sock)
+	}
+	return env
 }
 
 // args builds `docker compose ...` for the project. Overrides swap a file for

@@ -1,0 +1,29 @@
+# Demo stack: made-up data for TheBar's screenshots, not a real deployment.
+services:
+  vaultwarden:
+    image: vaultwarden/server:latest
+    container_name: vaultwarden
+    ports:
+      - 8222:80
+    volumes:
+      - ./vaultwarden:/data
+    restart: unless-stopped
+
+  uptime-kuma:
+    image: louislam/uptime-kuma:1
+    container_name: uptime-kuma
+    ports:
+      - 3001:3001
+    volumes:
+      - ./uptime-kuma:/app/data
+    restart: unless-stopped
+
+  syncthing:
+    image: lscr.io/linuxserver/syncthing:latest
+    container_name: syncthing
+    ports:
+      - 8384:8384
+    volumes:
+      - ./syncthing/config:/config
+      - /data/sync:/sync
+    restart: unless-stopped

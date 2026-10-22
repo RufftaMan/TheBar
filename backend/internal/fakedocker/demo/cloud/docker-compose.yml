@@ -1,0 +1,36 @@
+# Demo stack: made-up data for TheBar's screenshots, not a real deployment.
+services:
+  app:
+    image: nextcloud:latest
+    ports:
+      - 8080:80
+    volumes:
+      - nextcloud:/var/www/html
+    depends_on:
+      - db
+      - redis
+    restart: unless-stopped
+
+  cron:
+    image: nextcloud:latest
+    entrypoint: /cron.sh
+    volumes:
+      - nextcloud:/var/www/html
+    depends_on:
+      - db
+      - redis
+    restart: unless-stopped
+
+  db:
+    image: postgres:16
+    volumes:
+      - db:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  redis:
+    image: redis:alpine
+    restart: unless-stopped
+
+volumes:
+  nextcloud:
+  db:
