@@ -1,0 +1,30 @@
+services:
+  thebar:
+    build:
+      context: .
+      args:
+        VERSION: ${THEBAR_VERSION:-dev}
+    image: thebar:latest
+    container_name: thebar
+    restart: unless-stopped
+    # Host networking lets TheBar see host ports (port finder), reach every
+    # web UI on 127.0.0.1 for favicons, and read host network stats.
+    network_mode: host
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      THEBAR_SELF: thebar
+      THEBAR_LISTEN: ${THEBAR_LISTEN:-0.0.0.0:8800}
+      THEBAR_DISKS: ${THEBAR_DISKS:-System=/opt}
+    volumes:
+      # Docker API access (this is root-equivalent: keep TheBar on the LAN)
+      - /var/run/docker.sock:/var/run/docker.sock
+      # layout, password hash, icon cache, compose backups
+      - ./data:/data
+      # Compose projects, mounted at the SAME paths as on the host so relative
+      # paths inside compose files resolve exactly like they do for you.
+      # Your own projects and disks go into docker-compose.override.yml
+      # (see docker-compose.override.example.yml); it is merged in automatically.
+      - /opt:/opt
+      - /etc/localtime:/etc/localtime:ro

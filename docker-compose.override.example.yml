@@ -1,0 +1,11 @@
+# Machine-specific mounts. Copy to docker-compose.override.yml (which git
+# ignores); docker compose merges it into docker-compose.yml automatically.
+services:
+  thebar:
+    volumes:
+      # A compose project that lives outside /opt: mount it at the SAME path
+      # as on the host, so TheBar can edit it and run its stack actions.
+      # - /home/you/docker-compose.yaml:/home/you/docker-compose.yaml
+      #
+      # Disks for the usage bars in the header (see THEBAR_DISKS in .env), read-only:
+      # - /mnt:/mnt:ro,rslave

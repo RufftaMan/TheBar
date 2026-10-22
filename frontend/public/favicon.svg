@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="beer" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffb93a"/>
+      <stop offset="1" stop-color="#e08910"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#16130c"/>
+  <!-- handle -->
+  <path d="M42 28h4.5a5.5 5.5 0 0 1 5.5 5.5v7a5.5 5.5 0 0 1-5.5 5.5H42" fill="none" stroke="#f5a524" stroke-width="4.5"/>
+  <!-- mug -->
+  <rect x="13" y="22" width="30" height="32" rx="4.5" fill="url(#beer)"/>
+  <rect x="13" y="48" width="30" height="6" rx="3" fill="#c4740c"/>
+  <rect x="18.5" y="28" width="3" height="17" rx="1.5" fill="#ffd78a" opacity=".75"/>
+  <rect x="34" y="28" width="2.5" height="17" rx="1.25" fill="#ffd78a" opacity=".45"/>
+  <circle cx="27" cy="39" r="1.4" fill="#ffe3a6"/>
+  <circle cx="30.5" cy="33" r="1.1" fill="#ffe3a6"/>
+  <circle cx="26" cy="31" r="0.9" fill="#ffe3a6"/>
+  <!-- foam -->
+  <g fill="#fff3d6">
+    <rect x="11" y="17" width="34" height="8" rx="4"/>
+    <circle cx="17" cy="17" r="5.5"/>
+    <circle cx="25.5" cy="13.5" r="6.5"/>
+    <circle cx="34.5" cy="14.5" r="6"/>
+    <circle cx="41" cy="18" r="4.5"/>
+    <rect x="13" y="22" width="4.5" height="9" rx="2.25"/>
+  </g>
+</svg>

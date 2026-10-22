@@ -1,0 +1,33 @@
+# Keeps local files out of the image build (and out of the context sent to the daemon)
+.git
+.gitignore
+.dockerignore
+
+# secrets and runtime data
+data
+**/data
+.env
+.env.*
+*.env
+docker-compose.override.yml
+docker-compose.override.yaml
+**/password.hash
+**/secret.key
+*.pem
+*.key
+*.bundle
+
+# build output is regenerated inside the image
+**/node_modules
+frontend/dist
+backend/web/dist/assets
+backend/web/dist/index.html
+backend/thebar
+
+# not needed to build
+*.md
+docs
+.vscode
+.idea
+.claude
+**/*.log

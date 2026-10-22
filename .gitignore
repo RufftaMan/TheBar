@@ -1,0 +1,89 @@
+# ── Secrets and local state: never commit these ─────────────────────────────
+
+# TheBar's runtime data (password hash, session key, layout, icon cache,
+# compose backups). It lives in ./data next to docker-compose.yml, but any
+# data folder is covered in case you run the backend from another directory.
+/data/
+/backend/data/
+/frontend/data/
+# ...and the individual files, wherever they end up
+password.hash
+secret.key
+initial-password.txt
+layout.json
+
+# Local configuration (copy the *.example files instead)
+.env
+.env.*
+*.env
+!.env.example
+docker-compose.override.yml
+docker-compose.override.yaml
+!docker-compose.override.example.yml
+
+# Credentials, keys and certificates
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*.jks
+id_rsa*
+id_ed25519*
+.git-credentials
+.netrc
+*.token
+
+# Backups, scratch files and leftovers
+*.bundle
+*.bak
+*.orig
+*.rej
+*.tmp
+*.swp
+*~
+
+# ── Build output ────────────────────────────────────────────────────────────
+
+# Frontend
+node_modules/
+/frontend/dist/
+*.tsbuildinfo
+.vite/
+*.local
+coverage/
+
+# The built frontend that gets embedded into the Go binary
+/backend/web/dist/*
+!/backend/web/dist/.gitkeep
+
+# Go
+/backend/thebar
+/thebar
+*.test
+*.out
+*.exe
+*.prof
+*.pprof
+__debug_bin*
+go.work
+go.work.sum
+
+# Browser test output
+playwright-report/
+test-results/
+
+# ── Editors, tools, OS ──────────────────────────────────────────────────────
+.vscode/
+.idea/
+.claude/
+.cursor/
+.copilot/
+CLAUDE.local.md
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Logs
+*.log
+npm-debug.log*
