@@ -1,4 +1,4 @@
-# TheBar
+# <img src="docs/screenshots/social-preview.png" alt="TheBar: where all your containers meet" width="100%">
 
 Where all your containers meet. A fast, simple overview of the Docker services on a homelab host: one card per app, click the logo to open its web UI, with live stats and the usual container controls under the hood.
 
