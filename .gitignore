@@ -43,6 +43,10 @@ id_ed25519*
 *.swp
 *~
 
+# Local helper scripts (for example the README screenshot generator).
+# They stay on the maintainer's machine and are not part of the project.
+/tools/
+
 # ── Build output ────────────────────────────────────────────────────────────
 
 # Frontend

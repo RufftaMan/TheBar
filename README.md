@@ -19,7 +19,7 @@ Where all your containers meet. A fast, simple overview of the Docker services o
 
 ## Screenshots
 
-Made-up demo data, taken with the tools in `tools/screenshots`.
+Made-up demo data from a fake Docker host (see Development).
 
 **An open card:** live charts, start/stop/restart, logs, config.
 
@@ -97,11 +97,10 @@ Not covered: a single shared password (no users or roles), no two-factor login. 
 
 ## Development
 
-TheBar can run against a **fake Docker host** with made-up services: handy for trying the interface without a Docker setup, for hacking on the UI, and for the screenshots. It never touches the real Docker.
+TheBar can run against a **fake Docker host** with made-up services: handy for trying the interface without a Docker setup, for hacking on the UI, and for the tests. It never touches the real Docker.
 
 ```sh
 cd backend && go run ./cmd/fakedocker   # prints the command that starts TheBar against it
-tools/screenshots/run.sh                # rebuilds docs/screenshots (needs go, npm and docker)
 ```
 
 ```sh
