@@ -78,17 +78,20 @@
         <Icon name="edit" size={13} />
       </button>
     {/if}
-    <Status status={group.status} />
-    {#if plan.updateCount}
-      <span class="upd" title="Use the ⋯ menu to update everything in this group, or open a card">
-        <Icon name="download" size={12} stroke={2.4} />{plan.updateCount} update{plan.updateCount === 1 ? '' : 's'}
-      </span>
-    {/if}
-    {#if plan.driftCount}
-      <span class="upd drift" title="The compose file changed since these were started. Use the ⋯ menu to apply it.">
-        <Icon name="file" size={12} stroke={2.4} />{plan.driftCount} config change{plan.driftCount === 1 ? '' : 's'}
-      </span>
-    {/if}
+    <!-- status and hints share one column: less width, so the logo tiles stay close to the name -->
+    <div class="gstate">
+      <Status status={group.status} />
+      {#if plan.updateCount}
+        <span class="upd" title="Use the ⋯ menu to update everything in this group, or open a card">
+          <Icon name="download" size={12} stroke={2.4} />{plan.updateCount} update{plan.updateCount === 1 ? '' : 's'}
+        </span>
+      {/if}
+      {#if plan.driftCount}
+        <span class="upd drift" title="The compose file changed since these were started. Use the ⋯ menu to apply it.">
+          <Icon name="file" size={12} stroke={2.4} />{plan.driftCount} config change{plan.driftCount === 1 ? '' : 's'}
+        </span>
+      {/if}
+    </div>
     {#if collapsed}
       <div class="minis">
         {#each group.cards as c (c.key)}
@@ -193,15 +196,30 @@
     min-height: 32px;
     flex-wrap: wrap;
   }
+  /* The click target for opening and closing the group is bigger than the name:
+     it fills the header's height and reaches past the text on both sides. The
+     negative margins keep the chevron and the name where they were. */
   .title {
     display: flex;
     align-items: center;
+    align-self: stretch;
     gap: 4px;
     background: none;
     border: none;
-    padding: 2px 4px 2px 0;
+    padding: 2px 16px 2px 8px;
+    margin: 0 -12px 0 -8px;
     cursor: pointer;
-    border-radius: 6px;
+    border-radius: 8px;
+  }
+  .title:hover {
+    background: rgba(255, 255, 255, 0.04);
+  }
+  .gstate {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    min-width: 0;
   }
   .chev {
     display: grid;
