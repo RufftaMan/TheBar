@@ -124,6 +124,7 @@ type dInspect struct {
 	HostConfig   struct {
 		NetworkMode   string
 		RestartPolicy struct{ Name string }
+		PortBindings  map[string][]struct{ HostIp, HostPort string } // what the container is set up to publish
 	}
 	Config struct {
 		Image        string

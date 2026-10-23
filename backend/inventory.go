@@ -359,8 +359,16 @@ func fromInspect(in *dInspect) *Container {
 			c.Labels[k] = v
 		}
 	}
+	// A stopped container publishes nothing (Docker reports no ports), but it keeps
+	// its configured bindings. Use those, so an app keeps its web UI while it is
+	// stopped or being updated; otherwise its card changes shape and the helpers
+	// folded into it pop out as separate cards.
+	published := in.NetworkSettings.Ports
+	if len(published) == 0 {
+		published = in.HostConfig.PortBindings
+	}
 	seen := map[string]bool{}
-	for spec, binds := range in.NetworkSettings.Ports {
+	for spec, binds := range published {
 		cp, proto, _ := strings.Cut(spec, "/")
 		cport, _ := strconv.Atoi(cp)
 		for _, b := range binds {

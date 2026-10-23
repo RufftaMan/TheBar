@@ -54,6 +54,13 @@ func TestTheBarSeesTheFakeHost(t *testing.T) {
 	if c := byName["lidarr"]; c == nil || c.State != "exited" || c.FinishedAt == "" {
 		t.Fatalf("lidarr should be stopped: %+v", c)
 	}
+
+	// A stopped container publishes no ports (real Docker reports none), but it
+	// must keep its web UI: otherwise the card changes shape during every update
+	// and the helpers that were folded into it pop out as "new" cards.
+	if c := byName["lidarr"]; webPort(c) != 8686 {
+		t.Fatalf("stopped lidarr lost its web port: ports=%v webPort=%d", c.Ports, webPort(c))
+	}
 	if c := byName["paperless-ngx"]; c == nil || c.Alert != "Restart loop" {
 		t.Fatalf("paperless should be a restart loop, alert=%q", byName["paperless-ngx"].Alert)
 	}

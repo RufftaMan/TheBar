@@ -194,11 +194,16 @@ func (s *Server) inspect(c *container) map[string]any {
 		}
 		labels["com.docker.compose.depends_on"] = strings.Join(deps, ",")
 	}
-	ports := map[string][]map[string]string{}
+	ports := map[string][]map[string]string{}    // what is published right now
+	bindings := map[string][]map[string]string{} // what the container is configured to publish
 	exposed := map[string]struct{}{}
 	for _, p := range c.ports {
 		key := fmt.Sprintf("%d/tcp", p.container)
-		ports[key] = []map[string]string{{"HostIp": "0.0.0.0", "HostPort": strconv.Itoa(p.host)}, {"HostIp": "::", "HostPort": strconv.Itoa(p.host)}}
+		b := []map[string]string{{"HostIp": "0.0.0.0", "HostPort": strconv.Itoa(p.host)}, {"HostIp": "::", "HostPort": strconv.Itoa(p.host)}}
+		bindings[key] = b
+		if c.state != "exited" { // like real Docker: a stopped container publishes nothing
+			ports[key] = b
+		}
 		exposed[key] = struct{}{}
 	}
 	netMode := "bridge"
@@ -229,7 +234,7 @@ func (s *Server) inspect(c *container) map[string]any {
 	return map[string]any{
 		"Id": c.id, "Name": "/" + c.name, "Created": s.start.Add(-c.age).UTC().Format(time.RFC3339Nano),
 		"Image": c.imageID, "State": state, "RestartCount": c.restarts,
-		"HostConfig":      map[string]any{"NetworkMode": netMode, "RestartPolicy": map[string]string{"Name": c.policy}},
+		"HostConfig":      map[string]any{"NetworkMode": netMode, "RestartPolicy": map[string]string{"Name": c.policy}, "PortBindings": bindings},
 		"Config":          map[string]any{"Image": c.image, "Labels": labels, "ExposedPorts": exposed, "Tty": false},
 		"NetworkSettings": map[string]any{"Ports": ports, "Networks": nets},
 		"Mounts":          mounts,
