@@ -93,25 +93,29 @@
       </div>
       <div class="state">
         <Status status={card.status} />
+        <!-- hints are plain text lines under the status, not pills: they don't look clickable and don't make the card taller -->
+        {#if card.isNew}
+          <span class="hint new" title="Appeared since you last looked. Goes away once you open the card."><i class="dot"></i>New</span>
+        {/if}
         {#if card.update || card.recreate}
           <span
-            class="upd"
+            class="hint upd"
             title={card.update
               ? 'A newer image is available. Open the card to update.'
               : 'A newer image is already downloaded, but the container still runs the old one. Open the card to update.'}>
             <Icon name="download" size={12} stroke={2.4} />Update available
           </span>
         {/if}
+        {#if card.drift}
+          <span class="hint drift" title="The compose file changed since this container was created. Open the card to apply it.">
+            <Icon name="file" size={12} stroke={2.4} />Config changed
+          </span>
+        {/if}
+        {#if card.hidden}
+          <span class="hint dim" title="Hidden from the main view"><Icon name="eyeOff" size={12} stroke={2.2} />Hidden</span>
+        {/if}
       </div>
     </div>
-
-    {#if card.isNew || card.drift || card.hidden}
-      <div class="badges">
-        {#if card.isNew}<span class="badge new">New</span>{/if}
-        {#if card.drift}<span class="badge drift" title="The compose file changed since this container was created"><Icon name="file" size={11} stroke={2.5} />Config changed</span>{/if}
-        {#if card.hidden}<span class="badge"><Icon name="eyeOff" size={11} />Hidden</span>{/if}
-      </div>
-    {/if}
 
     {#if !expanded}
       {#if running}
@@ -278,21 +282,32 @@
     gap: 3px;
     flex-shrink: 0;
   }
-  /* a label, not a button: the action lives in the expanded card */
-  .upd {
+  /* labels, not buttons: the actions live in the expanded card */
+  .hint {
     display: inline-flex;
     align-items: center;
     gap: 4px;
     font-size: 11.5px;
     font-weight: 500;
-    color: #8fbcff;
     white-space: nowrap;
   }
-  .badges {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 5px;
-    margin-top: 10px;
+  .hint.upd {
+    color: #8fbcff;
+  }
+  .hint.new {
+    color: var(--brand);
+  }
+  .hint.drift {
+    color: #ffd27a;
+  }
+  .hint.dim {
+    color: var(--text-3);
+  }
+  .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--brand);
   }
   .stats {
     display: grid;

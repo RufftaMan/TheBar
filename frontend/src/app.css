@@ -170,37 +170,6 @@ textarea:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 
-.badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 20px;
-  padding: 0 7px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  border: 1px solid var(--border-strong);
-  color: var(--text-2);
-  background: var(--surface-2);
-  white-space: nowrap;
-}
-.badge.update {
-  color: #9cc7ff;
-  border-color: rgba(57, 135, 229, 0.45);
-  background: rgba(57, 135, 229, 0.12);
-}
-.badge.drift {
-  color: #ffd27a;
-  border-color: rgba(250, 178, 25, 0.4);
-  background: rgba(250, 178, 25, 0.1);
-}
-.badge.new {
-  color: var(--brand);
-  border-color: rgba(245, 165, 36, 0.45);
-  background: var(--brand-soft);
-}
-
 .sr-only {
   position: absolute;
   width: 1px;

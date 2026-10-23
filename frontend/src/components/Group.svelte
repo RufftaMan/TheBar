@@ -92,7 +92,11 @@
         <Icon name="download" size={12} stroke={2.4} />{updatable.length} update{updatable.length === 1 ? '' : 's'}
       </span>
     {/if}
-    {#if drift.length}<span class="badge drift" title="Config changed"><Icon name="file" size={11} stroke={2.5} />{drift.length}</span>{/if}
+    {#if drift.length}
+      <span class="upd drift" title="The compose file changed since these were started. Use the ⋯ menu to apply it.">
+        <Icon name="file" size={12} stroke={2.4} />{drift.length} config change{drift.length === 1 ? '' : 's'}
+      </span>
+    {/if}
     {#if collapsed}
       <div class="minis">
         {#each group.cards as c (c.key)}
@@ -219,6 +223,9 @@
     font-weight: 500;
     color: #8fbcff;
     white-space: nowrap;
+  }
+  .upd.drift {
+    color: #ffd27a;
   }
   .spacer {
     flex: 1;
