@@ -1,6 +1,6 @@
 import { tick } from 'svelte';
 import { app, composeAction, containerAction } from './store.svelte';
-import type { CardView, Container } from './types';
+import type { CardView, Container, GroupView } from './types';
 
 export function markSeen(key: string) {
   if (app.layout.seen.includes(key)) return;
@@ -139,4 +139,116 @@ export function grafanaUrl(c: Container): string | null {
   const expr = `sum(rate(container_cpu_usage_seconds_total{name="${c.name}"}[1m]))`;
   const panes = { a: { queries: [{ refId: 'A', expr }], range: { from: 'now-6h', to: 'now' } } };
   return `${base}/explore?schemaVersion=1&orgId=1&panes=${encodeURIComponent(JSON.stringify(panes))}`;
+}
+
+// ---- group actions: work for every group, automatic or made by hand ----
+
+export interface GroupPlan {
+  containers: Container[]; // everything in the group's cards (helpers included), without TheBar itself
+  byProject: Map<string, Container[]>; // compose containers per project
+  loose: Container[]; // containers that don't belong to a compose project
+  running: number;
+  stopped: number;
+  update: Map<string, string[]>; // project -> services that have a newer image
+  drift: Map<string, string[]>; // project -> services whose compose file changed
+  updateCount: number;
+  driftCount: number;
+  hasSelf: boolean;
+}
+
+function services(list: Container[]): string[] {
+  return [...new Set(list.map((c) => c.service!).filter(Boolean))];
+}
+
+export function planGroup(group: GroupView): GroupPlan {
+  const all = group.cards.flatMap((c) => c.all);
+  const containers = all.filter((c) => !c.self); // TheBar can't stop or update itself from here
+  const byProject = new Map<string, Container[]>();
+  const loose: Container[] = [];
+  for (const c of containers) {
+    if (c.project && c.service) {
+      if (!byProject.has(c.project)) byProject.set(c.project, []);
+      byProject.get(c.project)!.push(c);
+    } else {
+      loose.push(c);
+    }
+  }
+  const pick = (pred: (c: Container) => boolean) => {
+    const m = new Map<string, string[]>();
+    for (const [project, list] of byProject) {
+      const sv = services(list.filter(pred));
+      if (sv.length) m.set(project, sv);
+    }
+    return m;
+  };
+  const update = pick((c) => c.update === 'available' || c.update === 'recreate');
+  const drift = pick((c) => !!c.drift);
+  const count = (m: Map<string, string[]>) => [...m.values()].reduce((n, v) => n + v.length, 0);
+  return {
+    containers,
+    byProject,
+    loose,
+    running: containers.filter((c) => c.state === 'running' || c.state === 'restarting').length,
+    stopped: containers.filter((c) => c.state !== 'running' && c.state !== 'restarting').length,
+    update,
+    drift,
+    updateCount: count(update),
+    driftCount: count(drift),
+    hasSelf: all.some((c) => c.self),
+  };
+}
+
+function names(list: string[], max = 6): string {
+  return list.length > max ? `${list.slice(0, max).join(', ')} and ${list.length - max} more` : list.join(', ');
+}
+
+/** Start, stop or restart everything in a group, or update / apply config where needed. */
+export async function groupAction(group: GroupView, action: 'start' | 'stop' | 'restart' | 'update' | 'apply') {
+  const plan = planGroup(group);
+  const alive = (c: Container) => c.state === 'running' || c.state === 'restarting';
+  const want = (c: Container) => (action === 'start' ? !alive(c) : alive(c));
+
+  // what to do, per compose project (as one job each) and for loose containers (one by one)
+  const perProject = new Map<string, string[]>();
+  let loose: Container[] = [];
+  if (action === 'update' || action === 'apply') {
+    for (const [p, sv] of action === 'update' ? plan.update : plan.drift) perProject.set(p, sv);
+  } else {
+    for (const [p, list] of plan.byProject) {
+      const sv = services(list.filter(want));
+      if (sv.length) perProject.set(p, sv);
+    }
+    loose = plan.loose.filter(want);
+  }
+  const serviceCount = [...perProject.values()].reduce((n, v) => n + v.length, 0);
+  const total = serviceCount + loose.length;
+  if (!total) {
+    app.toast(
+      action === 'start' ? 'Everything in this group is already running.' : action === 'update' ? 'Nothing to update.' : action === 'apply' ? 'No config changes to apply.' : 'Nothing is running in this group.',
+    );
+    return;
+  }
+
+  const labels = { start: 'Start', stop: 'Stop', restart: 'Restart', update: 'Update', apply: 'Apply config' }[action];
+  const involved = [...[...perProject.values()].flat(), ...loose.map((c) => c.name)];
+  const body =
+    {
+      start: `Starts ${names(involved)}.`,
+      stop: `Stops ${total} container${total === 1 ? '' : 's'}: ${names(involved)}.`,
+      restart: `Restarts ${total} container${total === 1 ? '' : 's'}: ${names(involved)}.`,
+      update: `Downloads newer images and recreates ${names(involved)}. They will be unavailable for a few seconds.`,
+      apply: `Recreates ${names(involved)} with the changed compose file.`,
+    }[action] + (plan.hasSelf ? ' TheBar itself is skipped.' : '');
+  if (action !== 'start' && !(await app.ask(`${labels} ${group.name}?`, body, labels, action === 'stop'))) return;
+
+  for (const [project, sv] of perProject) composeAction(project, action === 'start' ? 'up' : action, sv);
+  for (const c of loose) {
+    try {
+      await containerAction(c.id, action as 'start' | 'stop' | 'restart');
+    } catch (e) {
+      app.toast(`${c.name}: ${(e as Error).message}`, 'error');
+      return;
+    }
+  }
+  if (loose.length && !perProject.size) app.toast(`${group.name}: ${action} done`, 'ok');
 }

@@ -3,9 +3,9 @@
   import Icon from './Icon.svelte';
   import Logo from './Logo.svelte';
   import Status from './Status.svelte';
-  import { app, composeAction } from '../lib/store.svelte';
+  import { app } from '../lib/store.svelte';
   import { dissolveGroup, renameGroup, toggleCollapse } from '../lib/arrange';
-  import { itemOrder, markSeen } from '../lib/actions';
+  import { groupAction, itemOrder, markSeen, planGroup } from '../lib/actions';
   import { draggable, dropClass } from '../lib/dnd';
   import type { View } from '../lib/layout';
   import type { GroupView } from '../lib/types';
@@ -34,26 +34,18 @@
     if (name && name !== group.name) renameGroup(group.id, name);
     app.renaming = null;
   }
-  const updatable = $derived(
-    group.project
-      ? [...new Set(group.cards.flatMap((c) => c.all).filter((c) => c.project === group.project && (c.update === 'available' || c.update === 'recreate')).map((c) => c.service!))]
-      : [],
-  );
-  const drift = $derived(group.project ? [...new Set(group.cards.flatMap((c) => c.all).filter((c) => c.drift && c.project === group.project).map((c) => c.service!))] : []);
+  // what the group can do right now: counts for the header and the menu
+  const plan = $derived(planGroup(group));
+  // for "Edit compose file": the cards that come from a compose project
+  const composeCards = $derived(group.cards.filter((c) => c.project));
 
-  async function stack(action: 'start' | 'stop' | 'restart' | 'update' | 'apply') {
+  function run(action: 'start' | 'stop' | 'restart' | 'update' | 'apply') {
     menu = false;
-    if (!group.project) return;
-    const words = {
-      start: ['Start', 'Starts every service in the stack.'],
-      stop: ['Stop', 'Stops every container in the stack.'],
-      restart: ['Restart', 'Restarts every container in the stack.'],
-      update: ['Pull & recreate', `Pulls newer images and recreates: ${updatable.join(', ')}.`],
-      apply: ['Apply config', `Recreates ${drift.join(', ')} with the changed compose file.`],
-    }[action];
-    if (action !== 'start' && !(await app.ask(`${words[0]} ${group.name}?`, words[1], words[0], action === 'stop'))) return;
-    const services = action === 'update' ? updatable : action === 'apply' ? drift : [];
-    composeAction(group.project, action === 'start' ? 'up' : action, services);
+    groupAction(group, action);
+  }
+  function editCompose(project: string, service?: string) {
+    menu = false;
+    app.modal = { kind: 'compose', project, service };
   }
 
   async function ungroup() {
@@ -87,14 +79,14 @@
       </button>
     {/if}
     <Status status={group.status} />
-    {#if updatable.length}
-      <span class="upd" title="Use the ⋯ menu to update the whole stack, or open a card">
-        <Icon name="download" size={12} stroke={2.4} />{updatable.length} update{updatable.length === 1 ? '' : 's'}
+    {#if plan.updateCount}
+      <span class="upd" title="Use the ⋯ menu to update everything in this group, or open a card">
+        <Icon name="download" size={12} stroke={2.4} />{plan.updateCount} update{plan.updateCount === 1 ? '' : 's'}
       </span>
     {/if}
-    {#if drift.length}
+    {#if plan.driftCount}
       <span class="upd drift" title="The compose file changed since these were started. Use the ⋯ menu to apply it.">
-        <Icon name="file" size={12} stroke={2.4} />{drift.length} config change{drift.length === 1 ? '' : 's'}
+        <Icon name="file" size={12} stroke={2.4} />{plan.driftCount} config change{plan.driftCount === 1 ? '' : 's'}
       </span>
     {/if}
     {#if collapsed}
@@ -131,26 +123,36 @@
       </div>
     {/if}
     <span class="spacer"></span>
-    {#if group.project}
-      <div class="menuwrap">
-        <button class="btn sm icon ghost" aria-label="Stack actions" title="Stack actions" onclick={() => (menu = !menu)}><Icon name="more" /></button>
-        {#if menu}
-          <button class="scrim" aria-label="Close menu" onclick={() => (menu = false)}></button>
-          <div class="menu" role="menu">
-            <button role="menuitem" onclick={() => stack('start')}><Icon name="play" size={14} />Start all</button>
-            <button role="menuitem" onclick={() => stack('restart')}><Icon name="restart" size={14} />Restart all</button>
-            <button role="menuitem" onclick={() => stack('stop')}><Icon name="stop" size={14} />Stop all</button>
-            {#if updatable.length}<button role="menuitem" onclick={() => stack('update')}><Icon name="download" size={14} />Pull & recreate ({updatable.length})</button>{/if}
-            {#if drift.length}<button role="menuitem" onclick={() => stack('apply')}><Icon name="file" size={14} />Apply config ({drift.length})</button>{/if}
-            <hr />
-            <button role="menuitem" onclick={() => ((menu = false), (app.modal = { kind: 'compose', project: group.project! }))}><Icon name="edit" size={14} />Edit compose file</button>
-            <button role="menuitem" onclick={ungroup}><Icon name="x" size={14} />Ungroup</button>
-          </div>
-        {/if}
-      </div>
-    {:else}
-      <button class="btn sm icon ghost" aria-label="Ungroup" title="Ungroup" onclick={ungroup}><Icon name="x" size={14} /></button>
-    {/if}
+    <div class="menuwrap">
+      <button class="btn sm icon ghost" aria-label="Group actions" title="Group actions" onclick={() => (menu = !menu)}><Icon name="more" /></button>
+      {#if menu}
+        <button class="scrim" aria-label="Close menu" onclick={() => (menu = false)}></button>
+        <div class="menu" role="menu">
+          {#if plan.stopped}<button role="menuitem" onclick={() => run('start')}><Icon name="play" size={14} />Start all{plan.running ? ` (${plan.stopped})` : ''}</button>{/if}
+          {#if plan.running}
+            <button role="menuitem" onclick={() => run('restart')}><Icon name="restart" size={14} />Restart all</button>
+            <button role="menuitem" onclick={() => run('stop')}><Icon name="stop" size={14} />Stop all</button>
+          {/if}
+          {#if plan.updateCount}<button role="menuitem" onclick={() => run('update')}><Icon name="download" size={14} />Update ({plan.updateCount})</button>{/if}
+          {#if plan.driftCount}<button role="menuitem" onclick={() => run('apply')}><Icon name="file" size={14} />Apply config ({plan.driftCount})</button>{/if}
+          {#if !plan.stopped && !plan.running && !plan.updateCount && !plan.driftCount}<div class="empty">Nothing to do here.</div>{/if}
+          <hr />
+          {#if group.project}
+            <!-- an automatic group is one compose project: one file -->
+            <button role="menuitem" onclick={() => editCompose(group.project!)}><Icon name="edit" size={14} />Edit compose file</button>
+          {:else if composeCards.length}
+            <!-- a group you made can mix projects: pick the container whose file you want -->
+            <div class="label">Edit compose file of…</div>
+            {#each composeCards as c (c.key)}
+              <button role="menuitem" title={c.main.configFiles?.[0] ?? ''} onclick={() => editCompose(c.project!, c.service)}>
+                <Icon name="edit" size={14} /><span class="mi">{c.title}</span><span class="muted proj">{c.project}</span>
+              </button>
+            {/each}
+          {/if}
+          <button role="menuitem" onclick={ungroup}><Icon name="x" size={14} />Ungroup</button>
+        </div>
+      {/if}
+    </div>
   </header>
 
   {#if !collapsed}
@@ -340,6 +342,33 @@
   }
   .menu button:hover {
     background: var(--surface-3);
+  }
+  .menu {
+    max-height: min(70vh, 520px);
+    overflow: auto;
+  }
+  .menu .label {
+    padding: 6px 9px 2px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--text-3);
+  }
+  .menu .empty {
+    padding: 7px 9px;
+    font-size: 12.5px;
+    color: var(--text-3);
+  }
+  .menu .mi {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .menu .proj {
+    font-size: 11px;
+    margin-left: 8px;
   }
   .menu hr {
     border: none;
