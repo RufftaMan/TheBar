@@ -93,32 +93,37 @@
       <div class="minis">
         {#each group.cards as c (c.key)}
           {@const drag = { id: 'c:' + c.key, list: 'g:' + group.id, kind: 'card' as const, title: c.title, icon: c.icon, disabled: !canDrag }}
-          {#if c.url}
-            <a
-              href={c.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              draggable="false"
-              title="Open {c.title}"
-              class="mini {dropClass('c:' + c.key)}"
-              class:off={c.status.level === 'stopped'}
-              data-mini-group={group.id}
-              style="--accent:{accents[c.key] || 'var(--brand)'}"
-              use:draggable={drag}
-              onclick={() => markSeen(c.key)}>
-              <Logo src={c.icon} name={c.title} size={38} bind:accent={accents[c.key]} />
-            </a>
-          {:else}
-            <span
-              class="mini nolink {dropClass('c:' + c.key)}"
-              class:off={c.status.level === 'stopped'}
-              title={c.title}
-              data-mini-group={group.id}
-              style="--accent:{accents[c.key] || 'var(--brand)'}"
-              use:draggable={drag}>
-              <Logo src={c.icon} name={c.title} size={38} bind:accent={accents[c.key]} />
-            </span>
-          {/if}
+          {@const hasUpdate = c.update || c.recreate}
+          <!-- the wrapper carries the update dot: a stopped tile is greyed out with a filter, which would grey the dot too -->
+          <span class="mwrap">
+            {#if c.url}
+              <a
+                href={c.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                draggable="false"
+                title="Open {c.title}{hasUpdate ? ' (update available)' : ''}"
+                class="mini {dropClass('c:' + c.key)}"
+                class:off={c.status.level === 'stopped'}
+                data-mini-group={group.id}
+                style="--accent:{accents[c.key] || 'var(--brand)'}"
+                use:draggable={drag}
+                onclick={() => markSeen(c.key)}>
+                <Logo src={c.icon} name={c.title} size={38} bind:accent={accents[c.key]} />
+              </a>
+            {:else}
+              <span
+                class="mini nolink {dropClass('c:' + c.key)}"
+                class:off={c.status.level === 'stopped'}
+                title="{c.title}{hasUpdate ? ' (update available)' : ''}"
+                data-mini-group={group.id}
+                style="--accent:{accents[c.key] || 'var(--brand)'}"
+                use:draggable={drag}>
+                <Logo src={c.icon} name={c.title} size={38} bind:accent={accents[c.key]} />
+              </span>
+            {/if}
+            {#if hasUpdate}<i class="updot" aria-hidden="true"></i>{/if}
+          </span>
         {/each}
       </div>
     {/if}
@@ -262,6 +267,23 @@
     gap: 10px;
     flex-wrap: wrap;
     margin-left: 4px;
+  }
+  .mwrap {
+    position: relative;
+    display: block;
+  }
+  /* blue dot in the corner: a newer image is available (same blue as the Update button) */
+  .updot {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    width: 14px;
+    height: 14px;
+    box-sizing: border-box;
+    border-radius: 50%;
+    background: var(--series-1);
+    border: 2.5px solid var(--bg); /* a ring in the page color keeps it readable on any logo */
+    pointer-events: none;
   }
   /* same size and look as the logo button on a card */
   .mini {
