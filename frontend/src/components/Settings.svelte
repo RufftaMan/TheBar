@@ -1,6 +1,7 @@
 <script lang="ts">
   import Modal from './Modal.svelte';
   import Icon from './Icon.svelte';
+  import Toggle from './Toggle.svelte';
   import { api } from '../lib/api';
   import { app } from '../lib/store.svelte';
   import { timeAgo } from '../lib/format';
@@ -62,12 +63,12 @@
 
 <Modal title="Settings" onclose={() => (app.modal = null)}>
   <div class="form">
-    <label class="check">
-      <input type="checkbox" checked={s.preferDomain} onchange={(e) => set('preferDomain', (e.currentTarget as HTMLInputElement).checked)} />
-      <span>
-        Open apps through their proxy domain when there is one
+    <label class="switchrow">
+      <span class="txt">
+        <span class="lbl">Open apps through their proxy domain when there is one</span>
         <span class="hint">Domains are read from Nginx Proxy Manager. Off: always use host:port.</span>
       </span>
+      <Toggle checked={s.preferDomain} onchange={(v) => set('preferDomain', v)} />
     </label>
 
     <label>
@@ -147,16 +148,16 @@
     display: grid;
     gap: 5px;
   }
-  .check {
+  .switchrow {
     display: flex;
-    gap: 10px;
-    align-items: flex-start;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    cursor: pointer;
   }
-  .check input {
-    margin-top: 3px;
-  }
-  .check .hint {
-    display: block;
+  .switchrow .txt {
+    display: grid;
+    gap: 2px;
   }
   .lbl {
     font-size: 12px;

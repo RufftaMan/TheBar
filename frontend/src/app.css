@@ -41,6 +41,13 @@ html {
   scrollbar-gutter: stable; /* the page must not shift when scrolling is locked during a drag */
 }
 
+/* While a card is open, switching its tabs changes the page height. Scroll
+   anchoring would answer by scrolling the page, which moves the tab bar you
+   just clicked: so the page stays where it is and only the content below moves. */
+html:has(article.card.expanded) {
+  overflow-anchor: none;
+}
+
 html,
 body {
   margin: 0;

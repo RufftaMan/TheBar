@@ -1,5 +1,6 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
+  import Toggle from './Toggle.svelte';
   import { app } from '../lib/store.svelte';
   import { api } from '../lib/api';
   import { buildView } from '../lib/layout';
@@ -119,9 +120,17 @@
     <span class="hint">Folding puts this container inside another card, like a database inside its app.</span>
   </label>
 
-  <label class="check">
-    <input type="checkbox" checked={!!prefs.hidden} onchange={(e) => set({ hidden: (e.currentTarget as HTMLInputElement).checked || undefined })} />
-    Hide this card <span class="muted">(it moves to the “Hidden” list at the bottom)</span>
+  <label class="switchrow">
+    <span class="txt">
+      <span class="lbl">Hide this card</span>
+      <span class="hint">It moves to the “Hidden” list at the bottom.</span>
+    </span>
+    <Toggle
+      checked={!!prefs.hidden}
+      onchange={(v) => {
+        set({ hidden: v || undefined });
+        if (v && app.expanded === card.key) app.expanded = null; // the card leaves the grid: close it
+      }} />
   </label>
 </div>
 
@@ -189,10 +198,15 @@
     height: 100%;
     object-fit: contain;
   }
-  .check {
+  .switchrow {
     display: flex;
     align-items: center;
-    gap: 8px;
-    font-size: 13px;
+    justify-content: space-between;
+    gap: 16px;
+    cursor: pointer;
+  }
+  .switchrow .txt {
+    display: grid;
+    gap: 2px;
   }
 </style>

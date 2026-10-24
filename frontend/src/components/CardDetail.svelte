@@ -27,6 +27,21 @@
     vol: card.all.reduce((s, c) => s + (c.volSize || 0), 0),
   });
 
+  // Tabs differ in height by hundreds of pixels. A shorter page makes the browser
+  // clamp the scroll position, and the whole view jumps. So the tab area never
+  // gets shorter than the tallest tab seen so far; switching only adds space below.
+  let panelEl = $state<HTMLDivElement>();
+  let panelMin = $state(0);
+  $effect(() => {
+    if (!panelEl) return;
+    const ro = new ResizeObserver(() => {
+      const h = panelEl!.offsetHeight;
+      if (h > panelMin) panelMin = h;
+    });
+    ro.observe(panelEl);
+    return () => ro.disconnect();
+  });
+
   let Editor: any = $state(null);
   $effect(() => {
     if (tab === 'config' && !Editor) import('./ComposeEditor.svelte').then((m) => (Editor = m.default));
@@ -88,7 +103,7 @@
     {/each}
   </div>
 
-  <div class="panel">
+  <div class="panel" bind:this={panelEl} style:min-height={panelMin ? panelMin + 'px' : null}>
     {#if tab === 'overview'}
       {#if running.length}
         <div class="charts">

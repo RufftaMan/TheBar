@@ -93,10 +93,10 @@ export function createEditor(parent: HTMLElement, doc: string, kind: 'compose' |
     },
     goto(line: number) {
       const l = view.state.doc.line(Math.min(Math.max(1, line), view.state.doc.lines));
-      view.dispatch({
-        selection: { anchor: l.from },
-        effects: [EditorView.scrollIntoView(l.from, { y: 'start', yMargin: 40 }), flashEffect.of(l.number)],
-      });
+      view.dispatch({ selection: { anchor: l.from }, effects: flashEffect.of(l.number) });
+      // scroll the editor's own scroller. EditorView.scrollIntoView would also
+      // scroll the page, which makes the view jump when the Config tab opens.
+      view.scrollDOM.scrollTop = Math.max(0, view.lineBlockAt(l.from).top - 40);
       setTimeout(() => view.dispatch({ effects: flashEffect.of(null) }), 1600);
     },
     focus: () => view.focus(),
