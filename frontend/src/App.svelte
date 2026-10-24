@@ -84,6 +84,27 @@
     if (e.key.length === 1 && /\S/.test(e.key)) searchInput?.focus(); // the key then lands in the input
   }
 
+  // While a card is open the page never gets shorter. A shorter page near the
+  // bottom would make the browser clamp the scroll position, and the view would
+  // jump when you switch to a shorter tab. This way the card simply grows and
+  // shrinks downward from its stable top; any slack ends up below the last card.
+  let mainEl = $state<HTMLElement>();
+  let pageMin = $state(0);
+  $effect(() => {
+    if (!mainEl) return;
+    if (!app.expanded) {
+      pageMin = 0;
+      return;
+    }
+    pageMin = Math.max(pageMin, mainEl.offsetHeight);
+    const ro = new ResizeObserver(() => {
+      const h = mainEl!.offsetHeight;
+      if (h > pageMin) pageMin = h;
+    });
+    ro.observe(mainEl);
+    return () => ro.disconnect();
+  });
+
   const resultIds = $derived(results.map((c) => 'c:' + c.key));
   const hiddenIds = $derived(view.hidden.map((c) => 'c:' + c.key));
   const visibleTop = $derived(view.top.filter((i) => i.kind === 'card' || i.group.cards.length > 0));
@@ -111,7 +132,7 @@
 {:else}
   <TopBar onkey={searchKey} bind:input={searchInput} />
 
-  <main>
+  <main bind:this={mainEl} style:min-height={pageMin ? pageMin + 'px' : null}>
     {#if app.query.trim()}
       <div class="results-head muted">
         {#if results.length}
