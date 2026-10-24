@@ -169,6 +169,9 @@ func (a *App) enrich(c *Container) {
 				c.WebScheme = "https"
 			}
 		}
+		if c.NetworkMode == "host" && (c.WebPort == 443 || c.WebPort == 8443 || c.WebPort == 9443) {
+			c.WebScheme = "https"
+		}
 	}
 	c.Icon = a.icons.Resolve(c)
 	c.Domains = a.proxy.Domains(c)

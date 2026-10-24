@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -176,12 +177,76 @@ func (ic *Icons) Resolve(c *Container) string {
 }
 
 // webPort is the host port where the container's web UI is reachable, 0 if none.
-func webPort(c *Container) int {
-	if c.NetworkMode == "host" {
-		if c.App != nil && c.App.Port > 0 {
-			return c.App.Port
+// usualWebPorts, in order of preference, when several candidates are left.
+var usualWebPorts = []int{80, 8080, 3000, 5000, 8000, 443, 8443}
+
+func pickPort(ports []int) int {
+	for _, want := range usualWebPorts {
+		for _, p := range ports {
+			if p == want {
+				return p
+			}
 		}
+	}
+	lowest := 0
+	for _, p := range ports {
+		if lowest == 0 || p < lowest {
+			lowest = p
+		}
+	}
+	return lowest
+}
+
+// hostModePort finds the web UI of a container on host networking. Docker
+// publishes nothing there, so there are no port bindings to read. Instead:
+// a known app's usual port, else the ports its image declares (EXPOSE) that
+// something really listens on. A stopped container has no sockets to check, so
+// its first declared port is used and its card keeps its link.
+func hostModePort(c *Container) int {
+	if c.Self {
+		return 0 // no link from this dashboard to itself
+	}
+	if c.App != nil && c.App.Port > 0 {
+		return c.App.Port
+	}
+	if len(c.Exposed) == 0 {
 		return 0
+	}
+	if c.State != "running" {
+		return pickPort(c.Exposed)
+	}
+	up := listeningTCP()
+	var live []int
+	for _, p := range c.Exposed {
+		if up[p] {
+			live = append(live, p)
+		}
+	}
+	return pickPort(live)
+}
+
+// listeningTCP is the set of TCP ports something listens on right now (TheBar
+// runs with host networking, so it sees the host's sockets). A variable so
+// tests can replace it.
+var listeningTCP = func() map[int]bool {
+	m := map[int]bool{}
+	for key := range listeningPorts() {
+		if ps, proto, _ := strings.Cut(key, "/"); proto == "tcp" {
+			if n, err := strconv.Atoi(ps); err == nil {
+				m[n] = true
+			}
+		}
+	}
+	return m
+}
+
+func webPort(c *Container) int {
+	// the label wins in every mode: for anything detection can't work out
+	if n, err := strconv.Atoi(c.Labels["thebar.port"]); err == nil && n > 0 && n < 65536 {
+		return n
+	}
+	if c.NetworkMode == "host" {
+		return hostModePort(c)
 	}
 	var tcp []Port
 	for _, p := range c.Ports {
@@ -199,7 +264,7 @@ func webPort(c *Container) int {
 			}
 		}
 	}
-	for _, want := range []int{80, 8080, 3000, 5000, 8000, 443, 8443} {
+	for _, want := range usualWebPorts {
 		for _, p := range tcp {
 			if p.Container == want {
 				return p.Host

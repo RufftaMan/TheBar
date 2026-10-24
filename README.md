@@ -72,7 +72,10 @@ TheBar runs with host networking and needs:
 | `THEBAR_AUTH` | – | `off` disables the login. Don't |
 | `THEBAR_NPM_DIR` | auto | Nginx Proxy Manager's `nginx/proxy_host` folder |
 
-Per-container labels also work: `thebar.icon=<dashboard-icons slug or URL>`.
+Per-container labels also work:
+
+- `thebar.icon=<dashboard-icons slug or URL>`: the card's logo.
+- `thebar.port=<port>`: the port of the web UI. Containers on host networking publish no ports, so TheBar uses the ports the image declares (`EXPOSE`) that something is really listening on. For apps known by name it knows the usual port. If neither works, set this label, or enter a link in the card's settings.
 
 ## Security
 
