@@ -201,7 +201,7 @@
   {/if}
 
   {#if app.drag}
-    <div class="ghost" style="left:{app.drag.x}px;top:{app.drag.y}px" aria-hidden="true">
+    <div class="ghost" style="transform:translate({app.drag.x}px,{app.drag.y}px) translate(-50%, -60%) rotate(-2deg)" aria-hidden="true">
       <span class="ghost-logo"><Logo src={app.drag.icon} name={app.drag.title} size={34} /></span>
       <span class="ghost-title">{app.drag.title}</span>
       {#if dropHint}<span class="ghost-hint">{dropHint}</span>{/if}
@@ -246,8 +246,10 @@
   }
   .ghost {
     position: fixed;
+    left: 0;
+    top: 0;
     z-index: 90;
-    transform: translate(-50%, -60%) rotate(-2deg);
+    will-change: transform; /* moved with transform only: no layout per pointer move */
     display: flex;
     align-items: center;
     gap: 10px;

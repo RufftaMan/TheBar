@@ -99,6 +99,20 @@ function nearestItem(grid: HTMLElement, x: number, y: number, skip: string): HTM
   return best;
 }
 
+function sameTarget(a: DropTarget | null, b: DropTarget | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  if (a.type === 'into' || b.type === 'into') return a.type === b.type && (a as { group: string }).group === (b as { group: string }).group;
+  return a.type === b.type && a.id === b.id && a.list === b.list;
+}
+
+/** Re-run the hit test, writing the result only if it changed (every write
+ *  re-evaluates the drop indicator of every card on the page). */
+function retarget(d: DragState) {
+  const t = hitTest(d, d.x, d.y);
+  if (!sameTarget(d.target, t)) d.target = t;
+}
+
 function hitTest(d: DragState, x: number, y: number): DropTarget | null {
   const el = document.elementFromPoint(x, y);
   if (!el) return null;
@@ -180,7 +194,7 @@ function autoScroll() {
         const speed = 60 + (MAX_SPEED - 60) * ratio * ratio; // eases in
         const before = scrollY;
         scrollBy(0, Math.sign(ratio) * speed * dt);
-        if (scrollY !== before) d.target = hitTest(d, d.x, d.y);
+        if (scrollY !== before) retarget(d);
       }
     }
     scrollRaf = requestAnimationFrame(step);
@@ -233,6 +247,8 @@ export function draggable(node: HTMLElement, opts: DragOpts) {
 
   function finish(drop: boolean) {
     clearTimeout(timer);
+    cancelAnimationFrame(trackRaf);
+    trackRaf = 0;
     window.removeEventListener('pointermove', move);
     window.removeEventListener('pointerup', up);
     window.removeEventListener('pointercancel', cancel);
@@ -242,6 +258,7 @@ export function draggable(node: HTMLElement, opts: DragOpts) {
     window.removeEventListener('keydown', key);
     const d = app.drag;
     if (d) {
+      if (drop) retarget(d);
       cancelAnimationFrame(scrollRaf);
       lockScroll(false);
       document.body.classList.remove('dragging');
@@ -252,12 +269,18 @@ export function draggable(node: HTMLElement, opts: DragOpts) {
     start = null;
   }
 
+  // Pointer events can arrive far faster than frames (high-rate mice): record
+  // the position right away, but hit-test once per frame.
+  let trackRaf = 0;
   function track(x: number, y: number) {
     const d = app.drag;
     if (!d) return;
     d.x = x;
     d.y = y;
-    d.target = hitTest(d, x, y);
+    trackRaf ||= requestAnimationFrame(() => {
+      trackRaf = 0;
+      if (app.drag === d) retarget(d);
+    });
   }
 
   // ---- mouse / pen ----
