@@ -8,7 +8,7 @@
 
   let { project, service }: { project: string; service?: string } = $props();
 
-  type FileDoc = { path: string; kind: 'compose' | 'env'; content: string; mtime: number };
+  type FileDoc = { path: string; kind: 'compose' | 'env'; content: string; mtime: string };
   let files = $state<FileDoc[]>([]);
   let drafts = $state<Record<string, string>>({});
   let active = $state('');
@@ -67,7 +67,7 @@
     saving = true;
     error = '';
     try {
-      const res = await api.put<{ ok: boolean; error?: string; mtime?: number; drift?: string[]; backup?: string }>(
+      const res = await api.put<{ ok: boolean; error?: string; mtime?: string; drift?: string[]; backup?: string }>(
         `/api/compose/${encodeURIComponent(project)}/file`,
         { path: current.path, content: drafts[current.path] ?? current.content, mtime: current.mtime },
       );
