@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -123,7 +124,9 @@ type FileDoc struct {
 	Path    string `json:"path"`
 	Kind    string `json:"kind"` // compose | env
 	Content string `json:"content"`
-	Mtime   int64  `json:"mtime"`
+	// Nanosecond mtimes exceed 2^53, so they travel as strings; a JS number
+	// would round them and every save would look stale.
+	Mtime int64 `json:"mtime,string"`
 }
 
 func (c *Compose) Read(name string) (map[string]any, error) {
@@ -217,7 +220,7 @@ func (c *Compose) Save(ctx context.Context, name, path, content string, baseMtim
 	}
 	st, _ = os.Stat(path)
 	drift := c.computeDrift(ctx, p)
-	return map[string]any{"ok": true, "mtime": st.ModTime().UnixNano(), "backup": filepath.Base(backup), "drift": drift}, nil
+	return map[string]any{"ok": true, "mtime": strconv.FormatInt(st.ModTime().UnixNano(), 10), "backup": filepath.Base(backup), "drift": drift}, nil
 }
 
 // projectName matches what compose accepts as a project name. Names that reach

@@ -429,7 +429,7 @@ func (a *App) putComposeFile(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Path    string `json:"path"`
 		Content string `json:"content"`
-		Mtime   int64  `json:"mtime"`
+		Mtime   int64  `json:"mtime,string"`
 	}
 	if err := readJSON(r, &body); err != nil {
 		jsonError(w, 400, err.Error())
