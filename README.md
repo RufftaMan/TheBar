@@ -38,8 +38,10 @@ Made-up demo data from a fake Docker host (see Development).
 ```sh
 git clone https://github.com/RufftaMan/TheBar.git && cd TheBar
 cp .env.example .env                    # optional: adjust the listen address, disks…
-docker compose up -d --build
+THEBAR_VERSION=$(git describe --tags --always --dirty 2>/dev/null) docker compose up -d --build
 ```
+
+The `THEBAR_VERSION=…` part stamps the build with the current commit, so Settings and the log show which version is running (a plain `docker compose up -d --build` works too, it just says `dev`). Use the same command to update after a `git pull`.
 
 Open `http://<ip of your server>:8800`. The first time, TheBar asks you to **choose a password**; that's the whole setup.
 
