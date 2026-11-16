@@ -396,8 +396,7 @@
   .foldback {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 8px;
+    gap: 8px; /* button sits right after the text, like Own card on the separator rows */
     padding: 4px 8px;
     margin-bottom: 8px;
     border-radius: 6px;
