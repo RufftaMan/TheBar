@@ -4,6 +4,7 @@
   import Logs from './Logs.svelte';
   import CardSettings from './CardSettings.svelte';
   import { app } from '../lib/store.svelte';
+  import { buildView } from '../lib/layout';
   import { aggregate, last } from '../lib/stats';
   import { bytes, cores, pct, rate, since, timeAgo } from '../lib/format';
   import { cardAction, grafanaUrl, singleAction, updateCard } from '../lib/actions';
@@ -40,6 +41,25 @@
     app.updateLayout((l) => {
       l.cards[key] = { ...(l.cards[key] || {}), parent: '' };
     });
+  }
+  // A card the user split off by hand: where would it go if we let TheBar decide?
+  const foldTarget = $derived.by(() => {
+    if (app.layout.cards[card.key]?.parent !== '') return null;
+    const cards = { ...app.layout.cards, [card.key]: { ...app.layout.cards[card.key] } };
+    delete cards[card.key].parent;
+    const v = buildView(app.containers, { ...app.layout, cards }, location.hostname);
+    return [...v.cards.values()].find((c) => c.folded.some((f) => f.key === card.key)) || null;
+  });
+  function foldBack() {
+    if (!foldTarget) return;
+    const target = foldTarget.key;
+    app.updateLayout((l) => {
+      const cur = { ...(l.cards[card.key] || {}) };
+      delete cur.parent;
+      l.cards[card.key] = cur;
+    });
+    app.expanded = target; // this card is now inside the other one: follow it
+    app.toast(`Folded back into ${foldTarget.title}`, 'info');
   }
   function uptimeOf(c: Container) {
     if (c.state === 'running') return 'Up ' + since(c.startedAt, app.now);
@@ -166,6 +186,12 @@
         {/if}
       </dl>
     {:else if tab === 'containers'}
+      {#if foldTarget}
+        <div class="foldback">
+          <span>Shown separately from {foldTarget.title}</span>
+          <button class="btn sm ghost" onclick={foldBack} title="Put this container back inside {foldTarget.title}"><Icon name="merge" size={12} />Fold back</button>
+        </div>
+      {/if}
       <table class="ctable">
         <thead>
           <tr><th>Container</th><th>Status</th><th class="r">CPU</th><th class="r">RAM</th><th></th></tr>
@@ -366,6 +392,18 @@
   }
   .sep td {
     padding: 4px 8px;
+  }
+  .foldback {
+    display: flex;
+    align-items: center;
+    gap: 8px; /* button sits right after the text, like Own card on the separator rows */
+    padding: 4px 8px;
+    margin-bottom: 8px;
+    border-radius: 6px;
+    background: var(--surface-2);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-2);
   }
   .sep span {
     margin-right: 8px;
