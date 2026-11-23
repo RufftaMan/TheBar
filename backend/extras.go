@@ -337,6 +337,38 @@ type UsedPort struct {
 	Bind  string `json:"bind"`
 }
 
+// loopbackBind is how a loopback-only listener is reported (IPv4 127.0.0.1 or
+// IPv6 ::1).
+const loopbackBind = "127.0.0.1"
+
+// bindOf turns an address from /proc/net/tcp{,6} (hex) into "all", an IPv4
+// address, loopbackBind, or "specific" for any other IPv6 address.
+func bindOf(addr string, v6 bool) string {
+	if strings.Trim(addr, "0") == "" {
+		return "all"
+	}
+	if v6 {
+		if addr == "00000000000000000000000001000000" { // ::1
+			return loopbackBind
+		}
+		return "specific"
+	}
+	if len(addr) == 8 {
+		a, _ := strconv.ParseUint(addr, 16, 32)
+		return net.IPv4(byte(a), byte(a>>8), byte(a>>16), byte(a>>24)).String()
+	}
+	return "all"
+}
+
+// mergeBind records the bind of one socket. A port can have several sockets:
+// "all" wins, and a loopback socket never hides one reachable from outside.
+func mergeBind(out map[string]string, key, bind string) {
+	prev, ok := out[key]
+	if !ok || (prev != "all" && (bind == "all" || bind != loopbackBind || prev == loopbackBind)) {
+		out[key] = bind
+	}
+}
+
 func listeningPorts() map[string]string { // "port/proto" -> bind address
 	out := map[string]string{}
 	read := func(file, proto string, state string, v6 bool) {
@@ -354,19 +386,8 @@ func listeningPorts() map[string]string { // "port/proto" -> bind address
 			if err != nil {
 				continue
 			}
-			bind := "all"
-			if strings.Trim(addr, "0") != "" {
-				if v6 {
-					bind = "specific"
-				} else if len(addr) == 8 {
-					a, _ := strconv.ParseUint(addr, 16, 32)
-					bind = net.IPv4(byte(a), byte(a>>8), byte(a>>16), byte(a>>24)).String()
-				}
-			}
 			key := strconv.Itoa(int(port)) + "/" + proto
-			if prev, ok := out[key]; !ok || prev != "all" {
-				out[key] = bind
-			}
+			mergeBind(out, key, bindOf(addr, v6))
 		}
 	}
 	read("/proc/net/tcp", "tcp", "0A", false)
@@ -394,7 +415,7 @@ func UsedPorts(inv *Inventory) []UsedPort {
 	for key, bind := range listen {
 		ps, proto, _ := strings.Cut(key, "/")
 		port, _ := strconv.Atoi(ps)
-		if bind == "127.0.0.1" || (proto == "udp" && port > 32767) {
+		if bind == loopbackBind || (proto == "udp" && port > 32767) {
 			continue // local-only listeners and ephemeral UDP aren't interesting
 		}
 		seen[key] = true

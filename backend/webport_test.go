@@ -88,3 +88,51 @@ func TestPortLabelOverridesEverything(t *testing.T) {
 		}
 	}
 }
+
+// Sidecars whose API listens on loopback only are not web UIs.
+func TestLoopbackOnlyListenersAreNotWebUIs(t *testing.T) {
+	merged := map[string]string{}
+	mergeBind(merged, "5580/tcp", bindOf("0100007F", false))                        // 127.0.0.1
+	mergeBind(merged, "8430/tcp", bindOf("00000000", false))                        // 0.0.0.0
+	mergeBind(merged, "8441/tcp", bindOf("0100007F", false))                        // loopback first,
+	mergeBind(merged, "8441/tcp", bindOf("00000000", false))                        // then all
+	mergeBind(merged, "9000/tcp", bindOf("00000000", false))                        // all first,
+	mergeBind(merged, "9000/tcp", bindOf("0100007F", false))                        // then loopback
+	mergeBind(merged, "9100/tcp", bindOf("0501A8C0", false))                        // 192.168.1.5 first,
+	mergeBind(merged, "9100/tcp", bindOf("0100007F", false))                        // then loopback
+	mergeBind(merged, "5581/tcp", bindOf("00000000000000000000000001000000", true)) // ::1
+	mergeBind(merged, "5582/udp", bindOf("0100007F", false))
+	up := tcpWebPorts(merged)
+	for port, want := range map[int]bool{
+		5580: false, // loopback only: ignored
+		8430: true,  // 0.0.0.0: used
+		8441: true,  // loopback and all addresses: used
+		9000: true,
+		9100: true,  // loopback and a LAN address: used
+		5581: false, // ::1 only: ignored
+		5582: false, // not tcp
+	} {
+		if up[port] != want {
+			t.Errorf("port %d: listed=%v, want %v", port, up[port], want)
+		}
+	}
+}
+
+func TestBindOf(t *testing.T) {
+	for _, c := range []struct {
+		addr string
+		v6   bool
+		want string
+	}{
+		{"00000000", false, "all"},
+		{"0100007F", false, "127.0.0.1"},
+		{"0501A8C0", false, "192.168.1.5"},
+		{"00000000000000000000000000000000", true, "all"},
+		{"00000000000000000000000001000000", true, "127.0.0.1"},
+		{"B80D0120000000000000000001000000", true, "specific"},
+	} {
+		if got := bindOf(c.addr, c.v6); got != c.want {
+			t.Errorf("bindOf(%s, %v) = %q, want %q", c.addr, c.v6, got, c.want)
+		}
+	}
+}

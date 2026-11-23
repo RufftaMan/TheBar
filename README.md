@@ -77,7 +77,7 @@ TheBar runs with host networking and needs:
 Per-container labels also work:
 
 - `thebar.icon=<dashboard-icons slug or URL>`: the card's logo.
-- `thebar.port=<port>`: the port of the web UI. Containers on host networking publish no ports, so TheBar uses the ports the image declares (`EXPOSE`) that something is really listening on. For apps known by name it knows the usual port. If neither works, set this label, or enter a link in the card's settings.
+- `thebar.port=<port>`: the port of the web UI. Containers on host networking publish no ports, so TheBar uses the ports the image declares (`EXPOSE`) that something is really listening on beyond loopback (a listener bound only to `127.0.0.1` or `::1` is treated as a sidecar API, not a web UI). For apps known by name it knows the usual port. If neither works, or the web UI really listens on loopback only (say, behind a reverse proxy), set this label, or enter a link in the card's settings.
 
 ## Security
 
