@@ -225,12 +225,21 @@ func hostModePort(c *Container) int {
 	return pickPort(live)
 }
 
-// listeningTCP is the set of TCP ports something listens on right now (TheBar
-// runs with host networking, so it sees the host's sockets). A variable so
-// tests can replace it.
-var listeningTCP = func() map[int]bool {
+// listeningTCP is the set of TCP ports something listens on right now and that
+// are reachable beyond loopback (TheBar runs with host networking, so it sees
+// the host's sockets). A listener bound only to 127.0.0.1 or ::1 is a sidecar
+// API, not a web UI; a reverse-proxied one can opt in with thebar.port. A
+// variable so tests can replace it.
+var listeningTCP = func() map[int]bool { return tcpWebPorts(listeningPorts()) }
+
+// tcpWebPorts picks the TCP ports of a listeningPorts() result that are
+// bound to something other than loopback.
+func tcpWebPorts(listen map[string]string) map[int]bool {
 	m := map[int]bool{}
-	for key := range listeningPorts() {
+	for key, bind := range listen {
+		if bind == loopbackBind {
+			continue
+		}
 		if ps, proto, _ := strings.Cut(key, "/"); proto == "tcp" {
 			if n, err := strconv.Atoi(ps); err == nil {
 				m[n] = true
