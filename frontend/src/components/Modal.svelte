@@ -3,11 +3,20 @@
   import type { Snippet } from 'svelte';
 
   let { title, onclose, wide = false, children }: { title: string; onclose: () => void; wide?: boolean; children: Snippet } = $props();
+
+  // Only close when the press *started* on the backdrop too: dragging a text
+  // selection out of an input and releasing outside the dialog fires a click
+  // on the backdrop, which must not count.
+  let pressedOnScrim = false;
 </script>
 
 <svelte:window onkeydown={(e) => e.key === 'Escape' && onclose()} />
 
-<div class="scrim" role="presentation" onclick={(e) => e.target === e.currentTarget && onclose()}>
+<div
+  class="scrim"
+  role="presentation"
+  onmousedown={(e) => (pressedOnScrim = e.target === e.currentTarget)}
+  onclick={(e) => e.target === e.currentTarget && pressedOnScrim && onclose()}>
   <div class="dlg" class:wide role="dialog" aria-modal="true" aria-label={title}>
     <header>
       <h2>{title}</h2>

@@ -4,6 +4,10 @@
   import { app } from '../lib/store.svelte';
   import { duration } from '../lib/format';
 
+  // Close on backdrop click only if the press also started there (a drag out of
+  // the dialog would otherwise count as a backdrop click).
+  let pressedOnScrim = false;
+
   let openJob = $state<string | null>(null);
   const jobs = $derived([...app.jobs].reverse().slice(0, 8));
   const runningCount = $derived(app.jobs.filter((j) => j.state === 'running').length);
@@ -70,7 +74,11 @@
 </div>
 
 {#if app.confirm}
-  <div class="scrim" role="presentation" onclick={(e) => e.target === e.currentTarget && answer(false)}>
+  <div
+    class="scrim"
+    role="presentation"
+    onmousedown={(e) => (pressedOnScrim = e.target === e.currentTarget)}
+    onclick={(e) => e.target === e.currentTarget && pressedOnScrim && answer(false)}>
     <div class="confirm" role="alertdialog" aria-modal="true" aria-labelledby="cf-t">
       <h3 id="cf-t">{app.confirm.title}</h3>
       {#if app.confirm.body}<p>{app.confirm.body}</p>{/if}
