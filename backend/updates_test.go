@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // fakeEngine serves just enough of the Docker API for the update checker:
@@ -25,6 +26,12 @@ func (f *fakeEngine) set(id, digest, remote string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.id, f.digest, f.remote = id, digest, remote
+}
+
+func (f *fakeEngine) lookups() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.asked
 }
 
 func (f *fakeEngine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -85,6 +92,33 @@ func TestBadgeClearsAfterUpdateEvenIfRegistryMovedOn(t *testing.T) {
 	u.check(ctx, false)
 	if got := badge(inv); got != "current" {
 		t.Fatalf("step 3 (recreated): badge = %q, want current", got)
+	}
+}
+
+// Containers get created and images pulled all the time on a busy host. The
+// local re-checks this triggers must not postpone the scheduled full check.
+func TestLocalRechecksDoNotPostponeFullCheck(t *testing.T) {
+	f := &fakeEngine{}
+	u, _ := newTestUpdates(t, f)
+	f.set("id1", "sha256:d1", "sha256:d1")
+	u.startDelay, u.every, u.settle = 0, 200*time.Millisecond, time.Millisecond
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { u.Run(ctx); close(done) }()
+	defer func() { cancel(); <-done }()
+
+	// local re-checks arrive much more often than full checks are due
+	busy := time.NewTicker(20 * time.Millisecond)
+	defer busy.Stop()
+	timeout := time.After(3 * time.Second)
+	for f.lookups() < 3 {
+		select {
+		case <-busy.C:
+			u.RefreshLocal()
+		case <-timeout:
+			t.Fatalf("%d full checks in 3s, want at least 3", f.lookups())
+		}
 	}
 }
 

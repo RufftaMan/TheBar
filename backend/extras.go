@@ -166,6 +166,11 @@ func (p *Proxy) Domains(c *Container) []string {
 // Image updates: compare the local image digest with the registry's.
 
 type Updates struct {
+	// timing of Run; fields so tests don't have to wait for hours
+	startDelay time.Duration // before the first full check
+	every      time.Duration // between scheduled full checks
+	settle     time.Duration // before a local re-check
+
 	d      *Docker
 	inv    *Inventory
 	mu     sync.RWMutex
@@ -180,6 +185,7 @@ type Updates struct {
 func NewUpdates(d *Docker, inv *Inventory) *Updates {
 	return &Updates{
 		d: d, inv: inv,
+		startDelay: time.Minute, every: 12 * time.Hour, settle: 2 * time.Second,
 		byRef: map[string]string{}, imgID: map[string]string{}, remote: map[string]string{},
 		kick: make(chan struct{}, 1), local: make(chan struct{}, 1),
 	}
@@ -228,13 +234,21 @@ func (u *Updates) LastCheck() time.Time {
 
 func (u *Updates) Run(ctx context.Context) {
 	select {
-	case <-time.After(time.Minute):
+	case <-time.After(u.startDelay):
 	case <-u.kick:
 	case <-ctx.Done():
 		return
 	}
+	// When the next full check is due. Only a full check re-arms it: a timer
+	// started afresh on every turn of the loop would be postponed by each local
+	// re-check, and on a busy host never fire.
+	due := time.NewTimer(u.every)
+	defer due.Stop()
 	online := true
 	for {
+		if online {
+			due.Reset(u.every)
+		}
 		u.check(ctx, online)
 		select {
 		case <-ctx.Done():
@@ -242,13 +256,13 @@ func (u *Updates) Run(ctx context.Context) {
 		case <-u.kick:
 			online = true
 		case <-u.local:
-			time.Sleep(2 * time.Second) // let a burst of recreates settle
+			time.Sleep(u.settle) // let a burst of recreates settle
 			select {
 			case <-u.local:
 			default:
 			}
 			online = false
-		case <-time.After(12 * time.Hour):
+		case <-due.C:
 			online = true
 		}
 	}
@@ -272,6 +286,7 @@ func (u *Updates) check(ctx context.Context, online bool) {
 
 	res := map[string]string{}
 	ids := map[string]string{}
+	failed := 0 // registry lookups that didn't work
 	for ref := range refs {
 		if hexID.MatchString(ref) || strings.Contains(ref, "@sha256:") {
 			res[ref] = "local" // pinned or referenced by ID: nothing to update
@@ -293,6 +308,7 @@ func (u *Updates) check(ctx context.Context, online bool) {
 			digest, err := u.d.RemoteDigest(cctx, ref)
 			if err != nil {
 				log.Printf("update check %s: %v", ref, err)
+				failed++
 			} else {
 				remote[ref] = digest
 			}
@@ -316,6 +332,14 @@ func (u *Updates) check(ctx context.Context, online bool) {
 		u.last = time.Now()
 	}
 	u.mu.Unlock()
+	if online {
+		n := map[string]int{}
+		for _, st := range res {
+			n[st]++
+		}
+		log.Printf("update check done: %d images, %d with updates, %d up to date, %d local or pinned, %d failed lookups",
+			len(refs), n["available"], n["current"], n["local"], failed)
+	}
 	u.inv.Update(func(c *Container) bool {
 		s := u.Status(c)
 		if s != c.Update {
