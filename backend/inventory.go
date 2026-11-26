@@ -56,10 +56,14 @@ type Container struct {
 	Icon      string    `json:"icon,omitempty"`    // URL path of the logo, "" if none
 	Domains   []string  `json:"domains,omitempty"` // proxy domains pointing here
 	Update    string    `json:"update,omitempty"`  // available | recreate | current | local | error
-	Drift     bool      `json:"drift,omitempty"`   // compose file changed since creation
-	SizeRw    int64     `json:"sizeRw,omitempty"`  // writable layer bytes
-	VolSize   int64     `json:"volSize,omitempty"` // named volume bytes
-	Alert     string    `json:"alert,omitempty"`   // human reason when something is wrong
+	// when the image's registry last answered (Unix ms, 0: never), and whether
+	// the latest attempt failed
+	UpdateChecked int64  `json:"updateChecked,omitempty"`
+	UpdateFailed  bool   `json:"updateFailed,omitempty"`
+	Drift         bool   `json:"drift,omitempty"`   // compose file changed since creation
+	SizeRw        int64  `json:"sizeRw,omitempty"`  // writable layer bytes
+	VolSize       int64  `json:"volSize,omitempty"` // named volume bytes
+	Alert         string `json:"alert,omitempty"`   // human reason when something is wrong
 }
 
 type Inventory struct {

@@ -9,6 +9,7 @@
   import { bytes, cores, pct, rate, since, timeAgo } from '../lib/format';
   import { markSeen, toggleCard } from '../lib/actions';
   import { draggable } from '../lib/dnd';
+  import { hasUpdate, isStale, staleText } from '../lib/updates';
   import type { CardView } from '../lib/types';
 
   // list: where the card lives ("top" or "g:<groupId>"); empty = not draggable (search results, hidden list)
@@ -20,6 +21,9 @@
   const agg = $derived(aggregate(app.history, ids));
   const disk = $derived(card.all.reduce((s, c) => s + (c.sizeRw || 0) + (c.volSize || 0), 0));
   const running = $derived(card.status.running > 0);
+  // which containers the update hints are about (only worth naming if there are several)
+  const outdated = $derived(card.all.filter(hasUpdate).map((c) => c.name));
+  const stale = $derived(card.all.filter((c) => isStale(c, app.now)));
   const uptime = $derived.by(() => {
     const m = card.main;
     if (m.state === 'running') return 'Up ' + since(m.startedAt, app.now);
@@ -100,10 +104,16 @@
         {#if card.update || card.recreate}
           <span
             class="hint upd"
-            title={card.update
+            title={(card.update
               ? 'A newer image is available. Open the card to update.'
-              : 'A newer image is already downloaded, but the container still runs the old one. Open the card to update.'}>
+              : 'A newer image is already downloaded, but the container still runs the old one. Open the card to update.') +
+              (card.all.length > 1 ? `\nContainers: ${outdated.join(', ')}` : '')}>
             <Icon name="download" size={12} stroke={2.4} />Update available
+          </span>
+        {/if}
+        {#if stale.length}
+          <span class="hint drift" title={stale.map((c) => `${c.name}: ${staleText(c, app.now)}`).join('\n')}>
+            <Icon name="alert" size={12} stroke={2.4} />{stale.some((c) => c.updateFailed) ? 'Update check failed' : 'Update info outdated'}
           </span>
         {/if}
         {#if card.drift}

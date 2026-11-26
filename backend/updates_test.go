@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // fakeEngine serves just enough of the Docker API for the update checker:
@@ -19,12 +20,19 @@ type fakeEngine struct {
 	digest string // local image's repo digest
 	remote string // what the registry currently serves
 	asked  int    // registry lookups so far
+	down   bool   // the registry doesn't answer
 }
 
 func (f *fakeEngine) set(id, digest, remote string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.id, f.digest, f.remote = id, digest, remote
+}
+
+func (f *fakeEngine) lookups() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.asked
 }
 
 func (f *fakeEngine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -35,6 +43,10 @@ func (f *fakeEngine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{"Id": f.id, "RepoDigests": []string{"example/img@" + f.digest}})
 	case strings.HasPrefix(r.URL.Path, "/distribution/"):
 		f.asked++
+		if f.down {
+			http.Error(w, "registry unreachable", http.StatusInternalServerError)
+			return
+		}
 		json.NewEncoder(w).Encode(map[string]any{"Descriptor": map[string]string{"digest": f.remote}})
 	default:
 		http.NotFound(w, r)
@@ -85,6 +97,65 @@ func TestBadgeClearsAfterUpdateEvenIfRegistryMovedOn(t *testing.T) {
 	u.check(ctx, false)
 	if got := badge(inv); got != "current" {
 		t.Fatalf("step 3 (recreated): badge = %q, want current", got)
+	}
+}
+
+// Containers get created and images pulled all the time on a busy host. The
+// local re-checks this triggers must not postpone the scheduled full check.
+func TestLocalRechecksDoNotPostponeFullCheck(t *testing.T) {
+	f := &fakeEngine{}
+	u, _ := newTestUpdates(t, f)
+	f.set("id1", "sha256:d1", "sha256:d1")
+	u.startDelay, u.every, u.settle = 0, 200*time.Millisecond, time.Millisecond
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { u.Run(ctx); close(done) }()
+	defer func() { cancel(); <-done }()
+
+	// local re-checks arrive much more often than full checks are due
+	busy := time.NewTicker(20 * time.Millisecond)
+	defer busy.Stop()
+	timeout := time.After(3 * time.Second)
+	for f.lookups() < 3 {
+		select {
+		case <-busy.C:
+			u.RefreshLocal()
+		case <-timeout:
+			t.Fatalf("%d full checks in 3s, want at least 3", f.lookups())
+		}
+	}
+}
+
+// A failed lookup keeps the previous answer, which may be outdated by now. The
+// container has to say so instead of passing for freshly checked.
+func TestFailedLookupIsFlagged(t *testing.T) {
+	f := &fakeEngine{}
+	u, inv := newTestUpdates(t, f)
+	ctx := context.Background()
+	c := func() *Container { return inv.Get("c1") }
+	f.set("id1", "sha256:d1", "sha256:d1")
+
+	// never reached the registry: nothing known, but flagged
+	f.down = true
+	u.check(ctx, true)
+	if c().Update != "" || !c().UpdateFailed || c().UpdateChecked != 0 {
+		t.Fatalf("never reached: update=%q failed=%v checked=%d", c().Update, c().UpdateFailed, c().UpdateChecked)
+	}
+
+	f.down = false
+	u.check(ctx, true)
+	ok := c().UpdateChecked
+	if c().Update != "current" || c().UpdateFailed || ok == 0 {
+		t.Fatalf("reached: update=%q failed=%v checked=%d", c().Update, c().UpdateFailed, ok)
+	}
+
+	// down again: old answer and its time stay, flag comes back and survives local re-checks
+	f.down = true
+	u.check(ctx, true)
+	u.check(ctx, false)
+	if c().Update != "current" || !c().UpdateFailed || c().UpdateChecked != ok {
+		t.Fatalf("down again: update=%q failed=%v checked=%d, want checked=%d", c().Update, c().UpdateFailed, c().UpdateChecked, ok)
 	}
 }
 

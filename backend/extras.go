@@ -165,13 +165,25 @@ func (p *Proxy) Domains(c *Container) []string {
 // ---------------------------------------------------------------------------
 // Image updates: compare the local image digest with the registry's.
 
+// lookup is what we know about one image ref from asking its registry.
+type lookup struct {
+	digest string    // what the registry served at the last successful lookup ("" = never)
+	at     time.Time // when that was
+	failed bool      // the latest attempt didn't work, so digest may be outdated
+}
+
 type Updates struct {
+	// timing of Run; fields so tests don't have to wait for hours
+	startDelay time.Duration // before the first full check
+	every      time.Duration // between scheduled full checks
+	settle     time.Duration // before a local re-check
+
 	d      *Docker
 	inv    *Inventory
 	mu     sync.RWMutex
 	byRef  map[string]string // image ref -> available | current | local
 	imgID  map[string]string // image ref -> local image ID
-	remote map[string]string // image ref -> registry digest from the last online check
+	remote map[string]lookup // image ref -> latest registry lookups
 	last   time.Time
 	kick   chan struct{} // full check (asks the registries)
 	local  chan struct{} // local re-check only (after pulls / recreates)
@@ -180,7 +192,8 @@ type Updates struct {
 func NewUpdates(d *Docker, inv *Inventory) *Updates {
 	return &Updates{
 		d: d, inv: inv,
-		byRef: map[string]string{}, imgID: map[string]string{}, remote: map[string]string{},
+		startDelay: time.Minute, every: 12 * time.Hour, settle: 2 * time.Second,
+		byRef: map[string]string{}, imgID: map[string]string{}, remote: map[string]lookup{},
 		kick: make(chan struct{}, 1), local: make(chan struct{}, 1),
 	}
 }
@@ -210,6 +223,18 @@ func (u *Updates) CheckNow() {
 	}
 }
 
+// Freshness tells how much a container's status can be trusted: when its
+// registry last answered (zero: never) and whether the latest lookup failed.
+func (u *Updates) Freshness(c *Container) (checked time.Time, failed bool) {
+	u.mu.RLock()
+	defer u.mu.RUnlock()
+	if u.byRef[c.Image] == "local" {
+		return time.Time{}, false // no registry involved
+	}
+	l := u.remote[c.Image]
+	return l.at, l.failed
+}
+
 // RefreshLocal re-evaluates against local images only, without asking the
 // registries. Called when containers are (re)created, e.g. after an update,
 // so badges don't stay stale until the next full check.
@@ -228,13 +253,21 @@ func (u *Updates) LastCheck() time.Time {
 
 func (u *Updates) Run(ctx context.Context) {
 	select {
-	case <-time.After(time.Minute):
+	case <-time.After(u.startDelay):
 	case <-u.kick:
 	case <-ctx.Done():
 		return
 	}
+	// When the next full check is due. Only a full check re-arms it: a timer
+	// started afresh on every turn of the loop would be postponed by each local
+	// re-check, and on a busy host never fire.
+	due := time.NewTimer(u.every)
+	defer due.Stop()
 	online := true
 	for {
+		if online {
+			due.Reset(u.every)
+		}
 		u.check(ctx, online)
 		select {
 		case <-ctx.Done():
@@ -242,13 +275,13 @@ func (u *Updates) Run(ctx context.Context) {
 		case <-u.kick:
 			online = true
 		case <-u.local:
-			time.Sleep(2 * time.Second) // let a burst of recreates settle
+			time.Sleep(u.settle) // let a burst of recreates settle
 			select {
 			case <-u.local:
 			default:
 			}
 			online = false
-		case <-time.After(12 * time.Hour):
+		case <-due.C:
 			online = true
 		}
 	}
@@ -260,7 +293,7 @@ func (u *Updates) check(ctx context.Context, online bool) {
 		refs[c.Image] = true
 	}
 	u.mu.RLock()
-	remote := make(map[string]string, len(u.remote))
+	remote := make(map[string]lookup, len(u.remote))
 	for k, v := range u.remote {
 		remote[k] = v
 	}
@@ -272,6 +305,7 @@ func (u *Updates) check(ctx context.Context, online bool) {
 
 	res := map[string]string{}
 	ids := map[string]string{}
+	failed := 0 // registry lookups that didn't work
 	for ref := range refs {
 		if hexID.MatchString(ref) || strings.Contains(ref, "@sha256:") {
 			res[ref] = "local" // pinned or referenced by ID: nothing to update
@@ -293,18 +327,22 @@ func (u *Updates) check(ctx context.Context, online bool) {
 			digest, err := u.d.RemoteDigest(cctx, ref)
 			if err != nil {
 				log.Printf("update check %s: %v", ref, err)
+				failed++
+				l := remote[ref] // keep the last answer, but mark it as doubtful
+				l.failed = true
+				remote[ref] = l
 			} else {
-				remote[ref] = digest
+				remote[ref] = lookup{digest: digest, at: time.Now()}
 			}
 		}
 		cancel()
-		digest, ok := remote[ref]
-		if !ok {
+		known := remote[ref].digest
+		if known == "" {
 			continue // never reached the registry for this one: unknown
 		}
 		st := "available"
 		for _, rd := range img.RepoDigests {
-			if strings.HasSuffix(rd, "@"+digest) {
+			if strings.HasSuffix(rd, "@"+known) {
 				st = "current"
 			}
 		}
@@ -316,14 +354,35 @@ func (u *Updates) check(ctx context.Context, online bool) {
 		u.last = time.Now()
 	}
 	u.mu.Unlock()
-	u.inv.Update(func(c *Container) bool {
-		s := u.Status(c)
-		if s != c.Update {
-			c.Update = s
-			return true
+	if online {
+		n := map[string]int{}
+		for _, st := range res {
+			n[st]++
 		}
+		log.Printf("update check done: %d images, %d with updates, %d up to date, %d local or pinned, %d failed lookups",
+			len(refs), n["available"], n["current"], n["local"], failed)
+	}
+	u.inv.Update(u.apply)
+	if online {
+		u.inv.hub.Broadcast("updates", u.Summary())
+	}
+}
+
+// apply writes the update info onto a container and reports whether it changed.
+func (u *Updates) apply(c *Container) bool {
+	status := u.Status(c)
+	at, failed := u.Freshness(c)
+	checked := millis(at)
+	if status == c.Update && checked == c.UpdateChecked && failed == c.UpdateFailed {
 		return false
-	})
+	}
+	c.Update, c.UpdateChecked, c.UpdateFailed = status, checked, failed
+	return true
+}
+
+// Summary is what the browser needs to know about update checks as a whole.
+func (u *Updates) Summary() map[string]int64 {
+	return map[string]int64{"checked": millis(u.LastCheck())}
 }
 
 // ---------------------------------------------------------------------------
