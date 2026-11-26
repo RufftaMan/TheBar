@@ -45,6 +45,8 @@ export interface Container {
   icon?: string;
   domains?: string[];
   update?: '' | 'available' | 'recreate' | 'current' | 'local';
+  updateChecked?: number; // when the image's registry last answered
+  updateFailed?: boolean; // the latest lookup didn't work
   drift?: boolean;
   sizeRw?: number;
   volSize?: number;

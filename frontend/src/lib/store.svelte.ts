@@ -91,6 +91,9 @@ class AppState {
     es.addEventListener('host', (e) => {
       this.host = JSON.parse((e as MessageEvent).data);
     });
+    es.addEventListener('updates', (e) => {
+      this.updatesChecked = JSON.parse((e as MessageEvent).data).checked;
+    });
     es.addEventListener('stats', (e) => {
       const latest: Record<string, Sample> = JSON.parse((e as MessageEvent).data);
       const h = this.history;

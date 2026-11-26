@@ -8,6 +8,7 @@
   import { aggregate, last } from '../lib/stats';
   import { bytes, cores, pct, rate, since, timeAgo } from '../lib/format';
   import { cardAction, grafanaUrl, singleAction, updateCard } from '../lib/actions';
+  import { hasUpdate, isStale, staleText, updateSummary } from '../lib/updates';
   import type { CardView, Container } from '../lib/types';
 
   let { card, accent }: { card: CardView; accent: string } = $props();
@@ -21,6 +22,9 @@
   const agg = $derived(aggregate(app.history, running.map((c) => c.id)));
   const anyStopped = $derived(card.all.some((c) => c.state !== 'running'));
   const grafana = $derived(grafanaUrl(card.main));
+  const outdated = $derived(card.all.filter(hasUpdate).length);
+  const updates = $derived(updateSummary(card.all, app.now));
+  const doubtful = $derived(card.all.some((c) => isStale(c, app.now)));
   const composeFile = $derived(card.main.configFiles?.[0]);
   const images = $derived([...new Set(card.all.map((c) => c.image))]);
   const disk = $derived({
@@ -104,7 +108,12 @@
 
   <div class="tabs" role="tablist">
     {#each [['overview', 'Overview'], ['containers', `Containers (${card.all.length})`], ['logs', 'Logs'], ['config', 'Config'], ['settings', 'Settings']] as [id, label]}
-      <button role="tab" class:active={tab === id} aria-selected={tab === id} onclick={() => (tab = id as Tab)}>{label}</button>
+      <button role="tab" class:active={tab === id} aria-selected={tab === id} onclick={() => (tab = id as Tab)}>
+        {label}
+        {#if id === 'containers' && outdated}
+          <span class="tabupd" title="{outdated} with an update"><Icon name="download" size={11} stroke={2.6} />{outdated}</span>
+        {/if}
+      </button>
     {/each}
   </div>
 
@@ -170,6 +179,16 @@
           <dt>Compose</dt>
           <dd><span class="mono small">{composeFile}</span> <span class="muted">· project {card.project}, service {card.service}</span></dd>
         {/if}
+        <dt>Updates</dt>
+        <dd>
+          {#if outdated}
+            <button class="textbtn upd" onclick={() => (tab = 'containers')} title="Show these containers">{updates.text}</button>
+          {:else}
+            {updates.text}
+          {/if}
+          {#if updates.checked}<span class:warn={doubtful} class:muted={!doubtful}> · checked {timeAgo(updates.checked, app.now)}</span>{/if}
+          {#if doubtful && updates.checked}<span class="warn"> · may be outdated</span>{/if}
+        </dd>
         <dt>Status</dt>
         <dd>{uptimeOf(card.main)}{#if card.main.restartCount}<span class="muted"> · restarted {card.main.restartCount}×</span>{/if}{#if card.main.restartPolicy}<span class="muted"> · restart policy “{card.main.restartPolicy}”</span>{/if}</dd>
         <dt>Disk</dt>
@@ -208,10 +227,20 @@
             {/if}
             {#each grp.containers as c (c.id)}
               {@const s = cpuOf(c.id)}
-              <tr>
+              <tr class:outdated={hasUpdate(c)}>
                 <td>
                   <div class="cname">{c.name}</div>
                   <div class="mono small muted">{c.image}</div>
+                  {#if hasUpdate(c)}
+                    <span
+                      class="cflag upd"
+                      title={c.update === 'available' ? 'The registry has a newer image' : 'The newer image is already downloaded, but this container still runs the old one'}>
+                      <Icon name="download" size={11} stroke={2.6} />{c.update === 'available' ? 'Update available' : 'Update downloaded, not applied'}
+                    </span>
+                  {/if}
+                  {#if isStale(c, app.now)}
+                    <span class="cflag warn"><Icon name="alert" size={11} stroke={2.4} />{staleText(c, app.now)}</span>
+                  {/if}
                 </td>
                 <td>
                   <span class="cstate {c.alert ? 'critical' : c.state}">{c.alert || uptimeOf(c)}</span>
@@ -383,6 +412,53 @@
   }
   .cname {
     font-weight: 500;
+  }
+  /* the row that needs updating: tinted, with a bar in the same blue as the flag */
+  tr.outdated td {
+    background: rgba(57, 135, 229, 0.09);
+  }
+  tr.outdated td:first-child {
+    box-shadow: inset 3px 0 0 var(--series-1);
+  }
+  .cflag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin: 4px 6px 0 0;
+    font-size: 11.5px;
+    font-weight: 600;
+  }
+  .cflag.upd {
+    padding: 1px 7px;
+    border-radius: 6px;
+    border: 1px solid var(--series-1);
+    background: rgba(57, 135, 229, 0.15);
+    color: #a9cdff;
+  }
+  .warn {
+    color: #ffd27a;
+  }
+  .tabupd {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    margin-left: 4px;
+    color: #8fbcff;
+    font-size: 11.5px;
+    vertical-align: -1px;
+  }
+  .textbtn {
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    text-align: left;
+  }
+  .textbtn.upd {
+    color: #8fbcff;
+  }
+  .textbtn:hover {
+    text-decoration: underline;
   }
   .sep td {
     background: var(--surface-2);

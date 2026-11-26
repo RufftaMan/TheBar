@@ -165,6 +165,13 @@ func (p *Proxy) Domains(c *Container) []string {
 // ---------------------------------------------------------------------------
 // Image updates: compare the local image digest with the registry's.
 
+// lookup is what we know about one image ref from asking its registry.
+type lookup struct {
+	digest string    // what the registry served at the last successful lookup ("" = never)
+	at     time.Time // when that was
+	failed bool      // the latest attempt didn't work, so digest may be outdated
+}
+
 type Updates struct {
 	// timing of Run; fields so tests don't have to wait for hours
 	startDelay time.Duration // before the first full check
@@ -176,7 +183,7 @@ type Updates struct {
 	mu     sync.RWMutex
 	byRef  map[string]string // image ref -> available | current | local
 	imgID  map[string]string // image ref -> local image ID
-	remote map[string]string // image ref -> registry digest from the last online check
+	remote map[string]lookup // image ref -> latest registry lookups
 	last   time.Time
 	kick   chan struct{} // full check (asks the registries)
 	local  chan struct{} // local re-check only (after pulls / recreates)
@@ -186,7 +193,7 @@ func NewUpdates(d *Docker, inv *Inventory) *Updates {
 	return &Updates{
 		d: d, inv: inv,
 		startDelay: time.Minute, every: 12 * time.Hour, settle: 2 * time.Second,
-		byRef: map[string]string{}, imgID: map[string]string{}, remote: map[string]string{},
+		byRef: map[string]string{}, imgID: map[string]string{}, remote: map[string]lookup{},
 		kick: make(chan struct{}, 1), local: make(chan struct{}, 1),
 	}
 }
@@ -214,6 +221,18 @@ func (u *Updates) CheckNow() {
 	case u.kick <- struct{}{}:
 	default:
 	}
+}
+
+// Freshness tells how much a container's status can be trusted: when its
+// registry last answered (zero: never) and whether the latest lookup failed.
+func (u *Updates) Freshness(c *Container) (checked time.Time, failed bool) {
+	u.mu.RLock()
+	defer u.mu.RUnlock()
+	if u.byRef[c.Image] == "local" {
+		return time.Time{}, false // no registry involved
+	}
+	l := u.remote[c.Image]
+	return l.at, l.failed
 }
 
 // RefreshLocal re-evaluates against local images only, without asking the
@@ -274,7 +293,7 @@ func (u *Updates) check(ctx context.Context, online bool) {
 		refs[c.Image] = true
 	}
 	u.mu.RLock()
-	remote := make(map[string]string, len(u.remote))
+	remote := make(map[string]lookup, len(u.remote))
 	for k, v := range u.remote {
 		remote[k] = v
 	}
@@ -309,18 +328,21 @@ func (u *Updates) check(ctx context.Context, online bool) {
 			if err != nil {
 				log.Printf("update check %s: %v", ref, err)
 				failed++
+				l := remote[ref] // keep the last answer, but mark it as doubtful
+				l.failed = true
+				remote[ref] = l
 			} else {
-				remote[ref] = digest
+				remote[ref] = lookup{digest: digest, at: time.Now()}
 			}
 		}
 		cancel()
-		digest, ok := remote[ref]
-		if !ok {
+		known := remote[ref].digest
+		if known == "" {
 			continue // never reached the registry for this one: unknown
 		}
 		st := "available"
 		for _, rd := range img.RepoDigests {
-			if strings.HasSuffix(rd, "@"+digest) {
+			if strings.HasSuffix(rd, "@"+known) {
 				st = "current"
 			}
 		}
@@ -340,14 +362,27 @@ func (u *Updates) check(ctx context.Context, online bool) {
 		log.Printf("update check done: %d images, %d with updates, %d up to date, %d local or pinned, %d failed lookups",
 			len(refs), n["available"], n["current"], n["local"], failed)
 	}
-	u.inv.Update(func(c *Container) bool {
-		s := u.Status(c)
-		if s != c.Update {
-			c.Update = s
-			return true
-		}
+	u.inv.Update(u.apply)
+	if online {
+		u.inv.hub.Broadcast("updates", u.Summary())
+	}
+}
+
+// apply writes the update info onto a container and reports whether it changed.
+func (u *Updates) apply(c *Container) bool {
+	status := u.Status(c)
+	at, failed := u.Freshness(c)
+	checked := millis(at)
+	if status == c.Update && checked == c.UpdateChecked && failed == c.UpdateFailed {
 		return false
-	})
+	}
+	c.Update, c.UpdateChecked, c.UpdateFailed = status, checked, failed
+	return true
+}
+
+// Summary is what the browser needs to know about update checks as a whole.
+func (u *Updates) Summary() map[string]int64 {
+	return map[string]int64{"checked": millis(u.LastCheck())}
 }
 
 // ---------------------------------------------------------------------------

@@ -175,9 +175,7 @@ func (a *App) enrich(c *Container) {
 	}
 	c.Icon = a.icons.Resolve(c)
 	c.Domains = a.proxy.Domains(c)
-	if s := a.updates.Status(c); s != "" {
-		c.Update = s
-	}
+	a.updates.apply(c)
 	if c.Project != "" {
 		c.Drift = false
 		for _, s := range a.compose.Drift(c.Project) {
@@ -291,6 +289,7 @@ func (a *App) serveEvents(w http.ResponseWriter, r *http.Request) {
 		var b bytes.Buffer
 		b.Write(sseMsg("containers", a.inv.List()))
 		b.Write(sseMsg("host", a.host.Info()))
+		b.Write(sseMsg("updates", a.updates.Summary()))
 		return b.Bytes()
 	})
 }
